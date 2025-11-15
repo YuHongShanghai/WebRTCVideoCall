@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/">
+        <file>resources/ic_call.svg</file>
+        <file>resources/ic_hungup.svg</file>
+        <file>resources/audio_on.svg</file>
+        <file>resources/audio_off.svg</file>
+        <file>resources/audio_on_hovered.svg</file>
+        <file>resources/audio_off_hovered.svg</file>
+        <file>resources/video_on.svg</file>
+        <file>resources/video_off.svg</file>
+        <file>resources/video_on_hovered.svg</file>
+        <file>resources/video_off_hovered.svg</file>
+        <file>resources/ic_more.svg</file>
+    </qresource>
+</RCC>

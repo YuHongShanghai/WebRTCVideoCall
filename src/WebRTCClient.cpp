@@ -144,20 +144,15 @@ void WebRTCClient::connectSignalServer() {
 }
 
 // Create and setup a PeerConnection
-void WebRTCClient::createPeerConnection(std::weak_ptr<rtc::WebSocket> wws,
-                                        std::string id) {
+void WebRTCClient::createPeerConnection(std::weak_ptr<rtc::WebSocket> wws, std::string id) {
     pc_ = std::make_shared<rtc::PeerConnection>(getRtcConfiguration());
 
     pc_->onStateChange([this](rtc::PeerConnection::State state) {
         Logi("peer connection state: {}", magic_enum::enum_name(state));
         if (state == rtc::PeerConnection::State::Connected) {
             stopSendMedia_ = false;
-            sendVideoThread_ = new std::thread([this]() {
-                sendVideoToRemote();
-            });
-            sendAudioThread_ = new std::thread([this]() {
-                sendAudioToRemote();
-            });
+            sendVideoThread_ = new std::thread([this]() { sendVideoToRemote(); });
+            sendAudioThread_ = new std::thread([this]() { sendAudioToRemote(); });
         }
         if (pcStateCallback_) {
             pcStateCallback_(state);
@@ -182,9 +177,7 @@ void WebRTCClient::createPeerConnection(std::weak_ptr<rtc::WebSocket> wws,
             ws->send(message.dump());
     });
 
-    pc_->onTrack([](auto track) {
-        Logd("onTrack: {}");
-    });
+    pc_->onTrack([](auto track) { Logd("onTrack: {}"); });
 
     // 本地ICE生成时回调，发送给对端
     // pc->createDataChannel() 或 setRemoteDescription() 时触发
@@ -199,8 +192,41 @@ void WebRTCClient::createPeerConnection(std::weak_ptr<rtc::WebSocket> wws,
             ws->send(message.dump());
     });
 
+    // 当对方创建的 DataChannel 到达时调用（我们是 answerer）
+    pc_->onDataChannel([this](std::shared_ptr<rtc::DataChannel> dc) {
+        Logi("received DataChannel [{}]", dc->label());
+        dc_ = dc;
+        setupDataChannel();
+    });
+
     peerConnectionMap_.emplace(id, pc_);
+
+    if (isCaller_) {
+        dc_ = pc_->createDataChannel("TEST");
+        setupDataChannel();
+    }
     Logd("end");
+}
+
+void WebRTCClient::setupDataChannel() {
+    dc_->onOpen([]() {
+        Logi("DataChannel opend");
+    });
+
+    dc_->onClosed([]() {
+        Logi("DataChannel closed");
+    });
+
+    // 收到消息
+    dc_->onMessage([this](auto data) {
+        if (std::holds_alternative<std::string>(data)) {
+            std::string message = std::get<std::string>(data);
+            Logd("received message: {}", message);
+            if (remoteMessageCallback_) {
+                remoteMessageCallback_(message);
+            }
+        }
+    });
 }
 
 bool WebRTCClient::setupSrcRtp(int &sock, int port, int &err) {
@@ -293,6 +319,17 @@ void WebRTCClient::stopSendMedia() {
         sendAudioThread_->join();
     }
     Logd("end");
+}
+void WebRTCClient::sendMessage(const std::string &msg) {
+    if (dc_) {
+        dc_->send(msg);
+    }
+}
+
+void WebRTCClient::onMessage(std::string &msg) {
+    if (remoteMessageCallback_) {
+        remoteMessageCallback_(msg);
+    }
 }
 
 bool WebRTCClient::setupSinkRtp(int &sock, int port, sockaddr_in &addr, int &err) {
@@ -421,6 +458,12 @@ void WebRTCClient::hungup(bool first) {
         audioTrack_ = nullptr;
     }
 
+    if (dc_) {
+        dc_->resetCallbacks();
+        dc_->close();
+        dc_ = nullptr;
+    }
+
     if (pc_) {
         pc_->resetCallbacks();
 
@@ -444,8 +487,10 @@ void WebRTCClient::setPcStateCallback(std::function<void(rtc::PeerConnection::St
     pcStateCallback_ = callback;
 }
 
-void WebRTCClient::setRemoteCallCallback(std::function<void(std::string)> callback) {
-    remoteCallCallback_ = callback;
+void WebRTCClient::setRemoteCallCallback(std::function<void(std::string)> callback) { remoteCallCallback_ = callback; }
+
+void WebRTCClient::setRemoteMessageCallback(std::function<void(std::string)> callback) {
+    remoteMessageCallback_ = callback;
 }
 
 std::string WebRTCClient::localId() { return localId_; }

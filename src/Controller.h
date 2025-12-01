@@ -25,6 +25,7 @@ public:
     Q_INVOKABLE void callRemote(const QString &id);
     Q_INVOKABLE void hungup();
     Q_INVOKABLE void initVideoItem(QObject *mainWindow);
+    Q_INVOKABLE void sendMessage(QString message);
 
     enum PcState {
         New = RTC_NEW,
@@ -60,6 +61,7 @@ signals:
     void receiveRemoteYuvData(const YUVData &yuv);
     void localVideoSizeChanged(int width, int height);
     void receiveLocalYuvData(const YUVData &yuv);
+    void remoteMessage(QString message);
 
 private:
     void startMediaTransport();

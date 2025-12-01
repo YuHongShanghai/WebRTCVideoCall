@@ -26,6 +26,7 @@ public slots:
     void init();
     void call(QString id);
     void hungup();
+    void sendMessage(QString message);
 
 signals:
     void remoteJoined(QString id);
@@ -34,11 +35,13 @@ signals:
     void pcStateChanged(rtc::PeerConnection::State state);
     void remoteCall(QString id);
     void pcClosed(QString id);
+    void remoteMessage(QString message);
 
 private:
     void onRoomClientsCallback(std::string data);
     void onPcStateCallback(rtc::PeerConnection::State state);
     void onRemoteCallCallback(std::string id);
+    void onRemoteMessageCallback(std::string message);
 
     std::unique_ptr<WebRTCClient> client_;
 };

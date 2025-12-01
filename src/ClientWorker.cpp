@@ -14,13 +14,16 @@ void ClientWorker::init() {
     client_->setRoomClientsCallback(std::bind(&ClientWorker::onRoomClientsCallback, this, std::placeholders::_1));
     client_->setPcStateCallback(std::bind(&ClientWorker::onPcStateCallback, this, std::placeholders::_1));
     client_->setRemoteCallCallback(std::bind(&ClientWorker::onRemoteCallCallback, this, std::placeholders::_1));
+    client_->setRemoteMessageCallback(std::bind(&ClientWorker::onRemoteMessageCallback, this, std::placeholders::_1));
     client_->connectSignalServer();
 }
 
 void ClientWorker::call(QString id) { client_->call(id.toStdString()); }
 
-void ClientWorker::hungup() {
-    client_->hungup();
+void ClientWorker::hungup() { client_->hungup(); }
+
+void ClientWorker::sendMessage(QString message) {
+    client_->sendMessage(message.toStdString());
 }
 
 void ClientWorker::onRoomClientsCallback(std::string data) {
@@ -50,8 +53,10 @@ void ClientWorker::onPcStateCallback(rtc::PeerConnection::State state) {
     emit pcStateChanged(state);
 }
 
-void ClientWorker::onRemoteCallCallback(std::string id) {
-    emit remoteCall(QString::fromStdString(id));
+void ClientWorker::onRemoteCallCallback(std::string id) { emit remoteCall(QString::fromStdString(id)); }
+
+void ClientWorker::onRemoteMessageCallback(std::string message) {
+    emit remoteMessage(QString::fromStdString(message));
 }
 
 ClientWorker::~ClientWorker() {}

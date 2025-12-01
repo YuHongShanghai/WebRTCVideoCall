@@ -11,5 +11,7 @@
         <file>resources/video_on_hovered.svg</file>
         <file>resources/video_off_hovered.svg</file>
         <file>resources/ic_more.svg</file>
+        <file>resources/message.svg</file>
+        <file>resources/message_hovered.svg</file>
     </qresource>
 </RCC>

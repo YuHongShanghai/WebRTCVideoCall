@@ -26,9 +26,11 @@ public:
     void connectSignalServer();
     void call(std::string id);
     void hungup(bool first = true);
+    void sendMessage(const std::string &msg);
     void setRoomClientsCallback(std::function<void(std::string)> callback);
     void setPcStateCallback(std::function<void(rtc::PeerConnection::State)> callback);
     void setRemoteCallCallback(std::function<void(std::string)> callback);
+    void setRemoteMessageCallback(std::function<void(std::string)> callback);
     std::string localId();
     int videoSrcPort();
     int videoSinkPort();
@@ -39,6 +41,7 @@ private:
     static std::string randomId(size_t length);
     rtc::Configuration getRtcConfiguration();
     void createPeerConnection(std::weak_ptr<rtc::WebSocket> wws, std::string id);
+    void setupDataChannel();
     bool setupSrcRtp(int &sock, int port, int &err);
     bool setupSinkRtp(int &sock, int port, sockaddr_in &addr, int &err);
 
@@ -50,6 +53,8 @@ private:
     void sendAudioToRemote();
     void stopSendMedia();
 
+    void onMessage(std::string &msg);
+
     std::string localId_;
     std::shared_ptr<rtc::WebSocket> ws_;
     std::shared_ptr<rtc::PeerConnection> pc_;
@@ -58,6 +63,7 @@ private:
     std::function<void(std::string)> roomClientsCallback_;
     std::function<void(rtc::PeerConnection::State)> pcStateCallback_;
     std::function<void(std::string)> remoteCallCallback_;
+    std::function<void(std::string)> remoteMessageCallback_;
 
     bool isCaller_ = false;
 
@@ -75,6 +81,9 @@ private:
     RtpDispatchConfig audioRtpConfig_;
     rtc::SSRC audioSsrc_ = 52;
     std::thread *sendAudioThread_ = nullptr;
+
+    // datachannel
+    std::shared_ptr<rtc::DataChannel> dc_;
 };
 
 

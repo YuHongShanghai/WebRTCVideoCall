@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Multimedia)
-#find_package(libdatachannel REQUIRED)
+find_package(libdatachannel REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
 
@@ -70,22 +70,9 @@ target_link_libraries(appWebRTCClient
         Qt6::Qml
         Qt6::Quick
         Qt6::Multimedia
-        #LibDataChannel::LibDataChannel
+        LibDataChannel::LibDataChannel
         nlohmann_json::nlohmann_json
         spdlog::spdlog
-)
-
-include_directories(
-        /Users/yuhong/Desktop/libdatachannel/include
-)
-
-link_directories(
-        /Users/yuhong/Desktop/libdatachannel/build
-)
-
-target_link_libraries(appWebRTCClient
-        PRIVATE
-        datachannel
 )
 
 target_link_libraries(appWebRTCClient PRIVATE

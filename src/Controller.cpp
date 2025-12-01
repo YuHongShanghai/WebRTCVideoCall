@@ -16,6 +16,7 @@ Controller::Controller(QObject *parent) : QObject(parent) {
     connect(client_, &ClientWorker::pcStateChanged, this, &Controller::onPcStateChanged, Qt::QueuedConnection);
     connect(client_, &ClientWorker::remoteCall, this, &Controller::onRemoteCall, Qt::QueuedConnection);
     connect(client_, &ClientWorker::pcClosed, this, &Controller::onPcClosed, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteMessage, this, &Controller::remoteMessage, Qt::QueuedConnection);
 
     clientThread_->start();
 
@@ -245,19 +246,15 @@ void Controller::onRemoteAudioFrame(AVFrame *frame) {
         return;
     }
 
-    int dstSamples = av_rescale_rnd(
-        swr_get_delay(swrCtx_, frame->sample_rate) + frame->nb_samples,
-        frame->sample_rate, frame->sample_rate, AV_ROUND_UP
-    );
+    int dstSamples = av_rescale_rnd(swr_get_delay(swrCtx_, frame->sample_rate) + frame->nb_samples, frame->sample_rate,
+                                    frame->sample_rate, AV_ROUND_UP);
 
     Logd("received samples {}, dstSamples {}", frame->nb_samples, dstSamples);
 
-    uint8_t* out_data[1];
-    out_data[0] = reinterpret_cast<uint8_t*>(swrBuffer_.data());
+    uint8_t *out_data[1];
+    out_data[0] = reinterpret_cast<uint8_t *>(swrBuffer_.data());
 
-    int converted = swr_convert(swrCtx_,
-                                out_data, MAX_OUT_SAMPLES,
-                                (const uint8_t**)frame->data, frame->nb_samples);
+    int converted = swr_convert(swrCtx_, out_data, MAX_OUT_SAMPLES, (const uint8_t **) frame->data, frame->nb_samples);
     if (converted < 0) {
         Loge("swr_convert error");
         return;
@@ -268,7 +265,7 @@ void Controller::onRemoteAudioFrame(AVFrame *frame) {
 
     int outChannels = 2;
     int bytes = converted * outChannels * 2;
-    audioPlayer_->pushAudio(reinterpret_cast<const char*>(swrBuffer_.data()), bytes);
+    audioPlayer_->pushAudio(reinterpret_cast<const char *>(swrBuffer_.data()), bytes);
 }
 
 void Controller::initVideoItem(QObject *mainWindow) {
@@ -277,27 +274,31 @@ void Controller::initVideoItem(QObject *mainWindow) {
         return;
     }
 
-    QObject *remoteVideoItem = mainWindow->findChild<QObject*>("remoteVideo");
+    QObject *remoteVideoItem = mainWindow->findChild<QObject *>("remoteVideo");
     if (remoteVideoItem == nullptr) {
         Loge("remoteVideoItem is null");
         return;
     }
 
-    connect(this, SIGNAL(remoteVideoSizeChanged(int, int)),
-                     remoteVideoItem, SLOT(onVideoSizeChanged(int, int)), Qt::UniqueConnection);
-    connect(this, SIGNAL(receiveRemoteYuvData(const YUVData&)),
-                     remoteVideoItem, SLOT(onReceiveVideoData(const YUVData&)),Qt::UniqueConnection);
+    connect(this, SIGNAL(remoteVideoSizeChanged(int, int)), remoteVideoItem, SLOT(onVideoSizeChanged(int, int)),
+            Qt::UniqueConnection);
+    connect(this, SIGNAL(receiveRemoteYuvData(const YUVData &)), remoteVideoItem,
+            SLOT(onReceiveVideoData(const YUVData &)), Qt::UniqueConnection);
 
-    QObject *localVideoItem = mainWindow->findChild<QObject*>("localVideo");
+    QObject *localVideoItem = mainWindow->findChild<QObject *>("localVideo");
     if (localVideoItem == nullptr) {
         Loge("localVideoItem is null");
         return;
     }
 
-    connect(this, SIGNAL(localVideoSizeChanged(int, int)),
-                 localVideoItem, SLOT(onVideoSizeChanged(int, int)), Qt::UniqueConnection);
-    connect(this, SIGNAL(receiveLocalYuvData(const YUVData&)),
-                     localVideoItem, SLOT(onReceiveVideoData(const YUVData&)),Qt::UniqueConnection);
+    connect(this, SIGNAL(localVideoSizeChanged(int, int)), localVideoItem, SLOT(onVideoSizeChanged(int, int)),
+            Qt::UniqueConnection);
+    connect(this, SIGNAL(receiveLocalYuvData(const YUVData &)), localVideoItem,
+            SLOT(onReceiveVideoData(const YUVData &)), Qt::UniqueConnection);
+}
+
+void Controller::sendMessage(QString message) {
+    client_->sendMessage(message);
 }
 
 

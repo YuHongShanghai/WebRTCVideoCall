@@ -68,6 +68,21 @@ FramelessWindow {
             localVideoItem.y = margin
             localVideoItem.x = margin
         }
+
+        function onRemoteMessage(msg) {
+            console.log("remote message", msg)
+            if (messagePanel.x === root.width)
+                messagePanelSlideIn.start()
+            messagePanel.setRemoteMessage(msg)
+        }
+    }
+
+    Connections {
+        target: messagePanel
+        function onMessage(msg) {
+            console.log("send message", msg);
+            controller.sendMessage(msg)
+        }
     }
 
     Component.onCompleted: {
@@ -226,6 +241,58 @@ FramelessWindow {
                     }
                 }
             }
+
+            Button {
+                id: messageBtn
+                width: 80
+                height: 80
+                hoverEnabled: true
+                background: Rectangle {
+                    anchors.fill: parent
+                    color: messageBtn.hovered ? "white" : "transparent"
+                    radius: 40
+
+                    Image {
+                        anchors.centerIn: parent
+                        source: messageBtn.hovered ? "qrc:/resources/message_hovered.svg" : "qrc:/resources/message.svg"
+                    }
+                }
+                onClicked: {
+                    if (messagePanel.x === root.width)
+                        messagePanelSlideIn.start()
+                    else
+                        messagePanelSlideOut.start()
+                }
+            }
+        }
+    }
+
+    MessagePanel {
+        id: messagePanel
+        height: parent.height
+        width: parent.width*0.35
+        x: root.width
+        y: 0
+        color: "#4D021122"
+
+        NumberAnimation {
+            id: messagePanelSlideIn
+            target: messagePanel
+            property: "x"
+            from: root.width
+            to: root.width - messagePanel.width
+            duration: 200
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            id: messagePanelSlideOut
+            target: messagePanel
+            property: "x"
+            from: root.width - messagePanel.width
+            to: root.width
+            duration: 200
+            easing.type: Easing.InCubic
         }
     }
 

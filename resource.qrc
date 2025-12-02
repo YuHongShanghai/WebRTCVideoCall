@@ -13,5 +13,7 @@
         <file>resources/ic_more.svg</file>
         <file>resources/message.svg</file>
         <file>resources/message_hovered.svg</file>
+        <file>resources/close.svg</file>
+        <file>resources/close_hovered.svg</file>
     </qresource>
 </RCC>

@@ -135,6 +135,25 @@ FramelessWindow {
         }
     }
 
+    Button {
+        id: closeBtn
+        width: 30
+        height: 30
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: callBtn.bottom
+        anchors.topMargin: 120
+        hoverEnabled: true
+        background: Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            Image {
+                anchors.fill: parent
+                source: closeBtn.hovered ? "qrc:/resources/close_hovered.svg" : "qrc:/resources/close.svg"
+            }
+        }
+        onClicked: Qt.quit()
+    }
+
     Rectangle {
         id: videoArea
         anchors.fill: parent

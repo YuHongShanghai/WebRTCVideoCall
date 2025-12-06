@@ -46,6 +46,10 @@ void ClientWorker::onRoomClientsCallback(std::string data) {
     } else if (json.contains("pc_closed")) {
         client_->hungup(false);
         emit pcClosed(QString::fromStdString(json["pc_closed"].get<std::string>()));
+    } else if (json.contains("enable_video")) {
+        emit remoteVideoEnabled(json["enable_video"].get<bool>());
+    } else if (json.contains("enable_audio")) {
+        emit remoteAudioEnabled(json["enable_audio"].get<bool>());
     }
 }
 
@@ -93,4 +97,20 @@ int ClientWorker::getAudioSinkPort() {
         return -1;
     }
     return client_->audioSinkPort();
+}
+
+void ClientWorker::notifyVideoEnabled(bool enable) {
+    if (client_.get()) {
+        nlohmann::json j;
+        j["enable_video"] = enable;
+        client_->sendWsMessage(j.dump());
+    }
+}
+
+void ClientWorker::notifyAudioEnabled(bool enable) {
+    if (client_.get()) {
+        nlohmann::json j;
+        j["enable_audio"] = enable;
+        client_->sendWsMessage(j.dump());
+    }
 }

@@ -17,11 +17,20 @@ class Controller : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString localId READ localId CONSTANT)
+    Q_PROPERTY(bool videoEnabled READ videoEnabled WRITE setVideoEnabled NOTIFY videoEnabledChanged)
+    Q_PROPERTY(bool remoteVideoEnabled READ remoteVideoEnabled NOTIFY remoteVideoEnabledChanged)
+    Q_PROPERTY(bool audioEnabled READ audioEnabled WRITE setAudioEnabled NOTIFY audioEnabledChanged)
 
 public:
     Controller(QObject *parent = nullptr);
     ~Controller();
     QString localId() const;
+    bool videoEnabled() const;
+    void setVideoEnabled(bool enabled);
+    bool remoteVideoEnabled() const;
+    bool audioEnabled() const;
+    void setAudioEnabled(bool enabled);
+
     Q_INVOKABLE void callRemote(const QString &id);
     Q_INVOKABLE void hungup();
     Q_INVOKABLE void initVideoItem(QObject *mainWindow);
@@ -49,6 +58,8 @@ public slots:
     void onLocalVideoFrame(AVFrame *frame);
     void extractYUVFromAVFrame(AVFrame* frame, YUVData &yuv);
     void onRemoteAudioFrame(AVFrame *frame);
+    void onRemoteVideoEnabled(bool enabled);
+    void onRemoteAudioEnabled(bool enabled);
 
 signals:
     void remoteJoined(QString id);
@@ -62,6 +73,10 @@ signals:
     void localVideoSizeChanged(int width, int height);
     void receiveLocalYuvData(const YUVData &yuv);
     void remoteMessage(QString message);
+    void videoEnabledChanged(bool enabled);
+    void remoteVideoEnabledChanged(bool enabled);
+    void audioEnabledChanged(bool enabled);
+    void remoteAudioEnabledChanged(bool enabled);
 
 private:
     void startMediaTransport();
@@ -84,5 +99,10 @@ private:
     SwrContext *swrCtx_ = nullptr;
     std::vector<int16_t> swrBuffer_;
     const int MAX_OUT_SAMPLES = 4096;
+
+    bool videoEnabled_ = true;
+    bool remoteVideoEnabled_ = true;
+    bool audioEnabled_ = true;
+    bool remoteAudioEnabled_ = true;
 };
 #endif // MAINWINDOW_H

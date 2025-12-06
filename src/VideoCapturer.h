@@ -24,6 +24,7 @@ public:
     void capture();
     void start();
     void stop();
+    void setPaused(bool paused);
 
 private:
     AVFormatContext *inFmtCtx_  = nullptr;
@@ -37,6 +38,10 @@ private:
     std::thread *captureThread_ = nullptr;
     std::atomic<bool> running_;
     std::function<void(AVFrame*)> frameCallback_;
+
+    bool paused_ = false;
+    std::mutex mtx_;
+    std::condition_variable cv_;
 };
 
 

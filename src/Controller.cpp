@@ -1,7 +1,5 @@
 #include "Controller.h"
 
-#include <QTimer>
-
 #include "Logger.h"
 #include "magic_enum.hpp"
 #include "util.h"
@@ -17,6 +15,8 @@ Controller::Controller(QObject *parent) : QObject(parent) {
     connect(client_, &ClientWorker::remoteCall, this, &Controller::onRemoteCall, Qt::QueuedConnection);
     connect(client_, &ClientWorker::pcClosed, this, &Controller::onPcClosed, Qt::QueuedConnection);
     connect(client_, &ClientWorker::remoteMessage, this, &Controller::remoteMessage, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteVideoEnabled, this, &Controller::onRemoteVideoEnabled, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteAudioEnabled, this, &Controller::onRemoteAudioEnabled, Qt::QueuedConnection);
 
     clientThread_->start();
 
@@ -50,8 +50,42 @@ Controller::~Controller() {
     }
 }
 
-QString Controller::localId() const {
-    return client_->getLocalId();
+QString Controller::localId() const { return client_->getLocalId(); }
+
+bool Controller::videoEnabled() const {
+    return videoEnabled_;
+}
+
+void Controller::setVideoEnabled(bool enabled) {
+    if (enabled != videoEnabled_) {
+        videoEnabled_ = enabled;
+        emit videoEnabledChanged(videoEnabled_);
+        if (enabled) {
+            mediaController_->startCaptureVideo(client_->getVideoSrcPort());
+        } else {
+            mediaController_->stopCaptureVideo();
+        }
+        client_->notifyVideoEnabled(enabled);
+    }
+}
+
+bool Controller::remoteVideoEnabled() const { return remoteVideoEnabled_; }
+
+bool Controller::audioEnabled() const {
+    return audioEnabled_;
+}
+
+void Controller::setAudioEnabled(bool enabled) {
+    if (enabled != audioEnabled_) {
+        audioEnabled_ = enabled;
+        emit audioEnabledChanged(audioEnabled_);
+        if (enabled) {
+            mediaController_->startCaptureAudio(client_->getAudioSrcPort());
+        } else {
+            mediaController_->stopCaptureAudio();
+        }
+        client_->notifyAudioEnabled(enabled);
+    }
 }
 
 void Controller::onRemoteJoined(QString id) {
@@ -246,11 +280,6 @@ void Controller::onRemoteAudioFrame(AVFrame *frame) {
         return;
     }
 
-    int dstSamples = av_rescale_rnd(swr_get_delay(swrCtx_, frame->sample_rate) + frame->nb_samples, frame->sample_rate,
-                                    frame->sample_rate, AV_ROUND_UP);
-
-    Logd("received samples {}, dstSamples {}", frame->nb_samples, dstSamples);
-
     uint8_t *out_data[1];
     out_data[0] = reinterpret_cast<uint8_t *>(swrBuffer_.data());
 
@@ -266,6 +295,30 @@ void Controller::onRemoteAudioFrame(AVFrame *frame) {
     int outChannels = 2;
     int bytes = converted * outChannels * 2;
     audioPlayer_->pushAudio(reinterpret_cast<const char *>(swrBuffer_.data()), bytes);
+}
+
+void Controller::onRemoteVideoEnabled(bool enabled) {
+    if (enabled != remoteVideoEnabled_) {
+        remoteVideoEnabled_ = enabled;
+        emit remoteVideoEnabledChanged(remoteVideoEnabled_);
+        if (enabled) {
+            mediaController_->startReceiveVideo(client_->getVideoSinkPort());
+        } else {
+            mediaController_->stopReceiveVideo();
+        }
+    }
+}
+
+void Controller::onRemoteAudioEnabled(bool enabled) {
+    if (enabled != remoteAudioEnabled_) {
+        remoteAudioEnabled_ = enabled;
+        emit remoteAudioEnabledChanged(remoteAudioEnabled_);
+        if (enabled) {
+            mediaController_->startReceiveAudio(client_->getAudioSinkPort());
+        } else {
+            mediaController_->stopReceiveAudio();
+        }
+    }
 }
 
 void Controller::initVideoItem(QObject *mainWindow) {

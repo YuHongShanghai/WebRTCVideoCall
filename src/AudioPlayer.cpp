@@ -43,7 +43,6 @@ void AudioPlayer::pushAudio(const char *data, int size)
     } else {
         auto interval = now - ts_;
         ts_ = now;
-        Logd("interval {}", interval);
     }
     QMutexLocker lock(&mutex_);
     buffer_.append(data, size);
@@ -73,7 +72,6 @@ void AudioPlayer::onAudioTimer()
 
     qint64 toWrite = qMin(freeBytes, 960*2*2);
     qint64 written = ioDevice_->write(buffer_.data(), toWrite);
-    Logd("written {}", written);
 
     if (written > 0) {
         buffer_.remove(0, written);

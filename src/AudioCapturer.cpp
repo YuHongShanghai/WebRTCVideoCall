@@ -258,10 +258,7 @@ void AudioCapturer::stop() {
         captureThread_->join();
     captureThread_ = nullptr;
 
-    av_write_trailer(inFmtCtx_);
-    if (!(inFmtCtx_->oformat->flags & AVFMT_NOFILE)) {
-        avio_closep(&inFmtCtx_->pb);
-    }
+    av_write_trailer(outFmtCtx_);
 
     swr_free(&swrCtx_);
     avcodec_free_context(&decCtx_);

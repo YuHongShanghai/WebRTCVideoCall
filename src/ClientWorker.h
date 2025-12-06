@@ -21,6 +21,8 @@ public:
     int getVideoSinkPort();
     int getAudioSrcPort();
     int getAudioSinkPort();
+    void notifyVideoEnabled(bool enable);
+    void notifyAudioEnabled(bool enable);
 
 public slots:
     void init();
@@ -36,6 +38,8 @@ signals:
     void remoteCall(QString id);
     void pcClosed(QString id);
     void remoteMessage(QString message);
+    void remoteVideoEnabled(bool enabled);
+    void remoteAudioEnabled(bool enabled);
 
 private:
     void onRoomClientsCallback(std::string data);

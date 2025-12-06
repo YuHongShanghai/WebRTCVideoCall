@@ -36,6 +36,7 @@ public:
     int videoSinkPort();
     int audioSrcPort();
     int audioSinkPort();
+    int sendWsMessage(const std::string &msg);
 
 private:
     static std::string randomId(size_t length);
@@ -84,6 +85,9 @@ private:
 
     // datachannel
     std::shared_ptr<rtc::DataChannel> dc_;
+
+    uint16_t videoRtpSeq_ = 0;
+    uint16_t audioRtpSeq_ = 0;
 };
 
 

@@ -16,6 +16,7 @@
 #include "Logger.h"
 #include "config.h"
 #include "magic_enum.hpp"
+#include "util.h"
 
 using nlohmann::json;
 template<class T>
@@ -264,6 +265,7 @@ void WebRTCClient::sendVideoToRemote() {
             continue;
 
         auto rtp = reinterpret_cast<rtc::RtpHeader *>(buffer);
+        rtp->setSeqNumber(videoRtpSeq_++);
         rtp->setSsrc(videoSsrc_);
         // Logd("sendVideoToRemote");
         videoTrack_->send(reinterpret_cast<const std::byte *>(buffer), len);
@@ -285,6 +287,7 @@ void WebRTCClient::sendAudioToRemote() {
         }
 
         auto rtp = reinterpret_cast<rtc::RtpHeader *>(buffer);
+        rtp->setSeqNumber(audioRtpSeq_++);
         rtp->setSsrc(audioSsrc_);
         audioTrack_->send(reinterpret_cast<const std::byte *>(buffer), len);
     }
@@ -505,8 +508,10 @@ int WebRTCClient::audioSrcPort() {
     return audioRtpConfig_.srcPort;
 }
 
-int WebRTCClient::audioSinkPort() {
-    return audioRtpConfig_.sinkPort;
+int WebRTCClient::audioSinkPort() { return audioRtpConfig_.sinkPort; }
+
+int WebRTCClient::sendWsMessage(const std::string &msg) {
+    ws_->send(msg);
 }
 
 rtc::Configuration WebRTCClient::getRtcConfiguration() {

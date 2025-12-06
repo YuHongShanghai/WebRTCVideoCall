@@ -46,13 +46,6 @@ void MediaController::startReceiveVideo(int port) {
 void MediaController::stopReceiveVideo() { videoReceiver_->stop(); }
 
 void MediaController::startCaptureAudio(int port) {
-    // 临时代码
-    return;
-    // if (!ClientInfo::instance()->isCaller()) {
-    //     Loge("would not to startCaptureAudio");
-    //     return;
-    // }
-
     if (audioCapturer_->init(port) < 0) {
         Loge("failed to init audio capturer");
         return;
@@ -64,12 +57,6 @@ void MediaController::startCaptureAudio(int port) {
 void MediaController::stopCaptureAudio() { audioCapturer_->stop(); }
 
 void MediaController::startReceiveAudio(int port) {
-    // 临时代码
-    // if (ClientInfo::instance()->isCaller()) {
-    //     Loge("would not to startReceiveAudio");
-    //     return;
-    // }
-
     if (audioReceiver_->init(port) < 0) {
         Loge("failed to init audio receiver");
         return;
@@ -77,9 +64,7 @@ void MediaController::startReceiveAudio(int port) {
     audioReceiver_->start();
 }
 
-void MediaController::stopReceiveAudio() {
-    audioReceiver_->stop();
-}
+void MediaController::stopReceiveAudio() { audioReceiver_->stop(); }
 
 void MediaController::recvRemoteVideoFrame(AVFrame *frame) {
     AVFrame *copy = av_frame_alloc();

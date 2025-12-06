@@ -164,6 +164,18 @@ FramelessWindow {
             siblingVideoItem: localVideoItem
             fillParent: true
             videoItemName: "remoteVideo"
+
+            Rectangle {
+                anchors.fill: parent
+                visible: !controller.remoteVideoEnabled
+                color: "#021122"
+                Text {
+                    text: root.remoteId
+                    anchors.centerIn: parent
+                    color: "white"
+                    font.pixelSize: 20
+                }
+            }
         }
 
         MovableVideoItem {
@@ -172,6 +184,18 @@ FramelessWindow {
             siblingVideoItem: remoteVideoItem
             fillParent: false
             videoItemName: "localVideo"
+
+            Rectangle {
+                anchors.fill: parent
+                visible: !controller.videoEnabled
+                color: "#021122"
+                Text {
+                    text: controller.localId
+                    anchors.centerIn: parent
+                    color: "white"
+                    font.pixelSize: 20
+                }
+            }
         }
 
         Button {
@@ -217,8 +241,13 @@ FramelessWindow {
 
                     Image {
                         anchors.centerIn: parent
-                        source: audionControlBtn.hovered ? "qrc:/resources/audio_on_hovered.svg" : "qrc:/resources/audio_on.svg"
+                        source: audionControlBtn.hovered ?
+                            (controller.audioEnabled ? "qrc:/resources/audio_on_hovered.svg": "qrc:/resources/audio_off_hovered.svg") :
+                            (controller.audioEnabled ? "qrc:/resources/audio_on.svg": "qrc:/resources/audio_off.svg")
                     }
+                }
+                onClicked: {
+                    controller.audioEnabled = !controller.audioEnabled
                 }
             }
 
@@ -256,8 +285,13 @@ FramelessWindow {
 
                     Image {
                         anchors.centerIn: parent
-                        source: videoControlBtn.hovered ? "qrc:/resources/video_on_hovered.svg" : "qrc:/resources/video_on.svg"
+                        source: videoControlBtn.hovered ?
+                            (controller.videoEnabled ? "qrc:/resources/video_on_hovered.svg": "qrc:/resources/video_off_hovered.svg") :
+                            (controller.videoEnabled ? "qrc:/resources/video_on.svg": "qrc:/resources/video_off.svg")
                     }
+                }
+                onClicked: {
+                    controller.videoEnabled = !controller.videoEnabled
                 }
             }
 

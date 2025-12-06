@@ -1,6 +1,8 @@
 #include "VideoCapturer.h"
-#include "Logger.h"
 #include <qtextstream.h>
+#include "Logger.h"
+
+#include "ClientInfo.h"
 #include "magic_enum.hpp"
 
 VideoCapturer::VideoCapturer(std::function<void(AVFrame*)> callback): frameCallback_(callback) {}
@@ -30,6 +32,7 @@ int VideoCapturer::init(int rtpPort) {
         Loge("Cannot open camera");
         return -1;
     }
+    Logd("camera opened, url {}",inFmtCtx_->url);
     av_dict_free(&options);
 
     if (avformat_find_stream_info(inFmtCtx_, nullptr) < 0) {
@@ -131,6 +134,10 @@ void VideoCapturer::capture() {
     Logi("Start capturing and sending RTP...");
 
     while (running_) {
+        {
+            std::unique_lock<std::mutex> lock(mtx_);
+            cv_.wait(lock, [this] { return !paused_; });
+        }
         int ret = av_read_frame(inFmtCtx_, inPkt);
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN)) {
@@ -212,4 +219,12 @@ void VideoCapturer::stop() {
     avformat_free_context(outFmtCtx_);
 
     Logi("VideoCapturer stopped.");
+}
+
+void VideoCapturer::setPaused(bool paused) {
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        paused_ = paused;
+    }
+    cv_.notify_one();
 }

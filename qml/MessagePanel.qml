@@ -7,6 +7,7 @@ Rectangle {
     width: 400
     height: 600
 
+
     signal message(string msg)
 
     ListModel {
@@ -20,7 +21,7 @@ Rectangle {
         ListView {
             id: messageView
             Layout.fillWidth: true
-            Layout.fillHeight: true // 确保 ListView 占据所有剩余空间
+            Layout.fillHeight: true
             spacing: 10
             model: chatModel
             clip: true
@@ -49,6 +50,8 @@ Rectangle {
         RowLayout {
             height: 50
             spacing: 5
+            id: sendTextArea
+            visible: true
 
             Rectangle {
                 Layout.fillWidth: true

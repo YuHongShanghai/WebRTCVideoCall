@@ -1,5 +1,6 @@
 #include "Controller.h"
 
+#include "ClientInfo.h"
 #include "Logger.h"
 #include "magic_enum.hpp"
 #include "util.h"
@@ -110,7 +111,9 @@ void Controller::onPcStateChanged(rtc::PeerConnection::State state) {
     }
 }
 
-void Controller::onRemoteCall(QString id) { emit remoteCall(id); }
+void Controller::onRemoteCall(QString id) {
+    emit remoteCall(id);
+}
 
 void Controller::onPcClosed(QString id) {
     stopMediaTransport();
@@ -130,6 +133,7 @@ void Controller::startMediaTransport() {
 
 void Controller::stopMediaTransport() {
     Logd("start");
+    stopAsr();
     mediaController_->stopCaptureVideo();
     mediaController_->stopReceiveVideo();
     mediaController_->stopCaptureAudio();
@@ -271,6 +275,10 @@ void Controller::extractYUVFromAVFrame(AVFrame *frame, YUVData &yuv) {
 }
 
 void Controller::onRemoteAudioFrame(AVFrame *frame) {
+    if (asrClient_) {
+        asrClient_->pushAudioFrame(frame);
+    }
+
     if (swrCtx_ == nullptr) {
         initSwrContext(frame);
     }
@@ -295,6 +303,8 @@ void Controller::onRemoteAudioFrame(AVFrame *frame) {
     int outChannels = 2;
     int bytes = converted * outChannels * 2;
     audioPlayer_->pushAudio(reinterpret_cast<const char *>(swrBuffer_.data()), bytes);
+    av_frame_unref(frame);
+    av_frame_free(&frame);
 }
 
 void Controller::onRemoteVideoEnabled(bool enabled) {
@@ -352,6 +362,18 @@ void Controller::initVideoItem(QObject *mainWindow) {
 
 void Controller::sendMessage(QString message) {
     client_->sendMessage(message);
+}
+
+void Controller::startAsr() {
+    asrClient_ = new AsrClient(this);
+    connect(asrClient_, &AsrClient::asrText, this, &Controller::asrText);
+}
+
+void Controller::stopAsr() {
+    if (asrClient_) {
+        asrClient_->deleteLater();
+        asrClient_ = nullptr;
+    }
 }
 
 

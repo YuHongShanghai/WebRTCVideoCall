@@ -15,5 +15,7 @@
         <file>resources/message_hovered.svg</file>
         <file>resources/close.svg</file>
         <file>resources/close_hovered.svg</file>
+        <file>resources/asr.svg</file>
+        <file>resources/asr_hovered.svg</file>
     </qresource>
 </RCC>

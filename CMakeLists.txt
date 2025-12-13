@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Multimedia WebSockets)
 find_package(libdatachannel REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
@@ -70,6 +70,7 @@ target_link_libraries(appWebRTCClient
         Qt6::Qml
         Qt6::Quick
         Qt6::Multimedia
+        Qt6::WebSockets
         LibDataChannel::LibDataChannel
         nlohmann_json::nlohmann_json
         spdlog::spdlog

@@ -75,6 +75,16 @@ FramelessWindow {
                 messagePanelSlideIn.start()
             messagePanel.setRemoteMessage(msg)
         }
+
+        function onAsrText(text, end) {
+            console.log(text, end)
+            if (end) {
+                asrPanel.finalAsrText = asrPanel.finalAsrText + text
+                asrPanel.curAsrText = ""
+            } else {
+                asrPanel.curAsrText = text
+            }
+        }
     }
 
     Connections {
@@ -317,6 +327,33 @@ FramelessWindow {
                         messagePanelSlideOut.start()
                 }
             }
+
+            Button {
+                id: asrBtn
+                width: 80
+                height: 80
+                hoverEnabled: true
+                background: Rectangle {
+                    anchors.fill: parent
+                    color: asrBtn.hovered ? "white" : "transparent"
+                    radius: 40
+
+                    Image {
+                        anchors.centerIn: parent
+                        source: asrBtn.hovered ? "qrc:/resources/asr_hovered.svg" : "qrc:/resources/asr.svg"
+                    }
+                }
+                onClicked: {
+                    if (asrPanel.y === -asrPanel.height) {
+                        controller.startAsr()
+                        asrPanelSlideIn.start()
+                    }
+                    else {
+                        asrPanelSlideOut.start()
+                        controller.stopAsr()
+                    }
+                }
+            }
         }
     }
 
@@ -344,6 +381,35 @@ FramelessWindow {
             property: "x"
             from: root.width - messagePanel.width
             to: root.width
+            duration: 200
+            easing.type: Easing.InCubic
+        }
+    }
+
+    AsrPanel {
+        id: asrPanel
+        height: parent.height*0.35
+        width: parent.width*0.5
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: -asrPanel.height
+        color: "#4D021122"
+
+        NumberAnimation {
+            id: asrPanelSlideIn
+            target: asrPanel
+            property: "y"
+            from: -asrPanel.height
+            to: 10
+            duration: 200
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            id: asrPanelSlideOut
+            target: asrPanel
+            property: "y"
+            from: 10
+            to: -asrPanel.height
             duration: 200
             easing.type: Easing.InCubic
         }

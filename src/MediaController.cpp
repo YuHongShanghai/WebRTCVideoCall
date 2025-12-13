@@ -69,20 +69,17 @@ void MediaController::stopReceiveAudio() { audioReceiver_->stop(); }
 void MediaController::recvRemoteVideoFrame(AVFrame *frame) {
     AVFrame *copy = av_frame_alloc();
     av_frame_ref(copy, frame);
-    av_frame_make_writable(copy);
     emit onRemoteVideoFrame(copy);
 }
 
 void MediaController::recvLocalVideoFrame(AVFrame *frame) {
     AVFrame *copy = av_frame_alloc();
     av_frame_ref(copy, frame);
-    av_frame_make_writable(copy);
     emit onLocalVideoFrame(copy);
 }
 
 void MediaController::recvRemoteAudioFrame(AVFrame *frame) {
     AVFrame *copy = av_frame_alloc();
     av_frame_ref(copy, frame);
-    av_frame_make_writable(copy);
     emit onRemoteAudioFrame(copy);
 }

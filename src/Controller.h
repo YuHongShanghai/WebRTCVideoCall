@@ -35,6 +35,8 @@ public:
     Q_INVOKABLE void hungup();
     Q_INVOKABLE void initVideoItem(QObject *mainWindow);
     Q_INVOKABLE void sendMessage(QString message);
+    Q_INVOKABLE void startAsr();
+    Q_INVOKABLE void stopAsr();
 
     enum PcState {
         New = RTC_NEW,
@@ -77,6 +79,7 @@ signals:
     void remoteVideoEnabledChanged(bool enabled);
     void audioEnabledChanged(bool enabled);
     void remoteAudioEnabledChanged(bool enabled);
+    void asrText(const QString &text, bool end);
 
 private:
     void startMediaTransport();
@@ -104,5 +107,7 @@ private:
     bool remoteVideoEnabled_ = true;
     bool audioEnabled_ = true;
     bool remoteAudioEnabled_ = true;
+
+    AsrClient *asrClient_ = nullptr;
 };
 #endif // MAINWINDOW_H

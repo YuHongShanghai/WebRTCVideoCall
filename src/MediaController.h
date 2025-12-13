@@ -11,6 +11,7 @@
 #include "AudioReceiver.h"
 #include "VideoCapturer.h"
 #include "VideoReceiver.h"
+#include "AsrClient.h"
 
 class MediaController: public QObject {
     Q_OBJECT

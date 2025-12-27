@@ -12,9 +12,21 @@ find_package(libdatachannel REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
 
-set(FFMPEG_ROOT "/usr/local")
+set(FFMPEG_ROOT "/opt/homebrew/Cellar/ffmpeg/7.1.1_3")
 include_directories(${FFMPEG_ROOT}/include)
 link_directories(${FFMPEG_ROOT}/lib)
+
+# webrtc audio processing
+# https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing/
+set(WEBRTC_AP_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/webrtc-audio-processing)
+
+add_library(webrtc_ap SHARED IMPORTED)
+set_target_properties(webrtc_ap PROPERTIES
+        IMPORTED_LOCATION
+        ${WEBRTC_AP_PREFIX}/lib/libwebrtc-audio-processing-2.dylib
+        INTERFACE_INCLUDE_DIRECTORIES
+        ${WEBRTC_AP_PREFIX}/include/webrtc-audio-processing
+)
 
 # CPP FILE
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -85,6 +97,9 @@ target_link_libraries(appWebRTCClient PRIVATE
         swresample
         swscale
 )
+
+target_include_directories(appWebRTCClient PRIVATE ${WEBRTC_AP_PREFIX}/include)
+target_link_libraries(appWebRTCClient PRIVATE webrtc_ap)
 
 include(GNUInstallDirs)
 install(TARGETS appWebRTCClient

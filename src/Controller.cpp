@@ -29,6 +29,7 @@ Controller::Controller(QObject *parent) : QObject(parent) {
     connect(mediaController_, &MediaController::onRemoteAudioFrame, this, &Controller::onRemoteAudioFrame);
 
     audioPlayer_ = new AudioPlayer(this);
+    audioProcesser_ = std::make_unique<AudioProcesser>(48000, 2);
 }
 
 Controller::~Controller() {
@@ -299,6 +300,8 @@ void Controller::onRemoteAudioFrame(AVFrame *frame) {
 
     if (converted == 0)
         return;
+
+    audioProcesser_->process(swrBuffer_.data(), swrBuffer_.data(), converted);
 
     int outChannels = 2;
     int bytes = converted * outChannels * 2;

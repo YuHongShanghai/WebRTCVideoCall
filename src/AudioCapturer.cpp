@@ -130,6 +130,8 @@ int AudioCapturer::init(int rtpPort) {
     accFrame->nb_samples = OPUS_FRAME_SIZE;
     av_frame_get_buffer(accFrame, 0);
 
+    audioProcesser_ = std::make_unique<AudioProcesser>(48000, 2);
+
     Logd("init success");
     return 0;
 }
@@ -210,6 +212,10 @@ void AudioCapturer::capture() {
                 remain -= copy;
 
                 if (acc_samples == OPUS_FRAME_SIZE) {
+                    auto inBuf = (int16_t*)accFrame->data[0];
+                    auto outBuf = inBuf;
+                    audioProcesser_->process(inBuf, outBuf, acc_samples);
+
                     // 填满一帧，送给 Opus 编码器
                     if ((ret = avcodec_send_frame(encCtx_, accFrame)) < 0) {
                         Loge("send_frame error: {}", av_errstr(ret));

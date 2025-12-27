@@ -1,0 +1,12 @@
+prefix=/Users/yuhong/Downloads/webrtc-audio-processing-master/_install
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: webrtc-audio-processing-2
+Description: WebRTC Audio Processing library
+Version: 2.1
+Requires: absl_base >= 20240722
+Requires.private: absl_flags, absl_strings, absl_numeric, absl_synchronization, absl_bad_optional_access
+Libs: -L${libdir} -lwebrtc-audio-processing-2
+Libs.private: -framework Foundation
+Cflags: -I${includedir}/webrtc-audio-processing-2 -DWEBRTC_LIBRARY_IMPL -DWEBRTC_POSIX

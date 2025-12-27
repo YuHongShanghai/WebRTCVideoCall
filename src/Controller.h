@@ -109,5 +109,7 @@ private:
     bool remoteAudioEnabled_ = true;
 
     AsrClient *asrClient_ = nullptr;
+
+    std::unique_ptr<AudioProcesser> audioProcesser_;
 };
 #endif // MAINWINDOW_H

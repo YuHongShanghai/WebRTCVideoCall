@@ -4,6 +4,7 @@
 
 #ifndef AUDIOCAPTURER_H
 #define AUDIOCAPTURER_H
+#include "AudioProcesser.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -37,6 +38,8 @@ private:
     std::thread *captureThread_ = nullptr;
     std::atomic<bool> running_;
     const int OPUS_FRAME_SIZE = 960; // 20ms @ 48kHz
+
+    std::unique_ptr<AudioProcesser> audioProcesser_;
 };
 
 

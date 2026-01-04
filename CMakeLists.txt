@@ -15,7 +15,7 @@ find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(OpenCV REQUIRED)
 
-set(FFMPEG_ROOT "/opt/homebrew/Cellar/ffmpeg/7.1.1_3")
+set(FFMPEG_ROOT "/opt/homebrew/Cellar/ffmpeg@7/7.1.3")
 include_directories(${FFMPEG_ROOT}/include)
 link_directories(${FFMPEG_ROOT}/lib)
 
@@ -28,7 +28,7 @@ set_target_properties(webrtc_ap PROPERTIES
         IMPORTED_LOCATION
         ${WEBRTC_AP_PREFIX}/lib/libwebrtc-audio-processing-2.dylib
         INTERFACE_INCLUDE_DIRECTORIES
-        ${WEBRTC_AP_PREFIX}/include/webrtc-audio-processing
+        ${WEBRTC_AP_PREFIX}/include/webrtc-audio-processing-2
 )
 
 # onnxruntime

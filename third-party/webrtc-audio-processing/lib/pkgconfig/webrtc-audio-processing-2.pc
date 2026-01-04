@@ -1,4 +1,4 @@
-prefix=/Users/yuhong/Downloads/webrtc-audio-processing-master/_install
+prefix=/Users/yuhong/Desktop/webrtc_learn/WebRTCClient/third-party/webrtc-audio-processing
 includedir=${prefix}/include
 libdir=${prefix}/lib
 

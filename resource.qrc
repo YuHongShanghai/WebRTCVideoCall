@@ -17,5 +17,17 @@
         <file>resources/close_hovered.svg</file>
         <file>resources/asr.svg</file>
         <file>resources/asr_hovered.svg</file>
+        <file>resources/gesture_ok.svg</file>
+        <file>resources/gesture_one.svg</file>
+        <file>resources/gesture_like.svg</file>
+        <file>resources/gesture_dislike.svg</file>
+        <file>resources/gesture_peace.svg</file>
+        <file>resources/gesture_palm.svg</file>
+        <file>resources/gesture_holy.svg</file>
+        <file>resources/gesture_hand_heart.svg</file>
+        <file>resources/gesture_middle_finger.svg</file>
+        <file>resources/gesture_fist.svg</file>
+        <file>resources/gesture.svg</file>
+        <file>resources/gesture_hovered.svg</file>
     </qresource>
 </RCC>

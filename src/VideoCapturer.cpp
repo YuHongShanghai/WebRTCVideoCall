@@ -126,18 +126,14 @@ int VideoCapturer::init(int rtpPort) {
 }
 
 void VideoCapturer::capture() {
-    AVPacket* inPkt = av_packet_alloc();
-    AVPacket* outPkt = av_packet_alloc();
-    AVFrame* decFrame = av_frame_alloc();
+    AVPacket *inPkt = av_packet_alloc();
+    AVPacket *outPkt = av_packet_alloc();
+    AVFrame *decFrame = av_frame_alloc();
     int frameIndex = 0;
 
     Logi("Start capturing and sending RTP...");
 
     while (running_) {
-        {
-            std::unique_lock<std::mutex> lock(mtx_);
-            cv_.wait(lock, [this] { return !paused_; });
-        }
         int ret = av_read_frame(inFmtCtx_, inPkt);
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN)) {
@@ -161,9 +157,11 @@ void VideoCapturer::capture() {
         avcodec_send_packet(decCtx_, inPkt);
 
         while (avcodec_receive_frame(decCtx_, decFrame) == 0) {
-            sws_scale(swsCtx_, decFrame->data, decFrame->linesize, 0, decCtx_->height,
-                      yuvFrame_->data, yuvFrame_->linesize);
+            std::lock_guard lock(gestureMutex_);
+            sws_scale(swsCtx_, decFrame->data, decFrame->linesize, 0, decCtx_->height, yuvFrame_->data,
+                      yuvFrame_->linesize);
             yuvFrame_->pts = frameIndex++;
+
             if (frameCallback_) {
                 frameCallback_(yuvFrame_);
             }
@@ -186,6 +184,27 @@ void VideoCapturer::capture() {
     av_frame_free(&decFrame);
 }
 
+void VideoCapturer::gestureRecognition() {
+    AVFrame *gestureFrame = nullptr;
+    while (gestureThreadRunning_) {
+        if (yuvFrame_) {
+            std::lock_guard lock(gestureMutex_);
+            gestureFrame = av_frame_clone(yuvFrame_);
+            av_frame_get_buffer(gestureFrame, 0);
+            av_frame_copy(gestureFrame, yuvFrame_);
+        }
+        auto result = processer_.gestureRecognition(gestureFrame);
+        if (gestureFrame) {
+            av_frame_free(&gestureFrame);
+            gestureFrame = nullptr;
+        }
+
+        if (!result.label.empty() && gestureCallback_) {
+            gestureCallback_(result);
+        }
+    }
+}
+
 void VideoCapturer::start() {
     if (running_) {
         return;
@@ -201,10 +220,16 @@ void VideoCapturer::stop() {
     }
     running_ = false;
     if (captureThread_ && captureThread_->joinable()) {
-        Logd("waiting for thread to stop");
+        Logd("waiting for capture thread to stop");
         captureThread_->join();
     }
     captureThread_ = nullptr;
+
+    if (gestureThread_ && gestureThread_->joinable()) {
+        Logd("waiting for process thread to stop");
+        gestureThread_->join();
+    }
+    gestureThread_ = nullptr;
 
     av_write_trailer(outFmtCtx_);
 
@@ -221,10 +246,20 @@ void VideoCapturer::stop() {
     Logi("VideoCapturer stopped.");
 }
 
-void VideoCapturer::setPaused(bool paused) {
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        paused_ = paused;
+void VideoCapturer::setGestureCb(const std::function<void(Detection &)> &callback) { gestureCallback_ = callback; }
+
+void VideoCapturer::startGesture() {
+    processer_.enableGestureDetection(true);
+    gestureThreadRunning_ = true;
+    gestureThread_ = new std::thread(&VideoCapturer::gestureRecognition, this);
+}
+
+void VideoCapturer::stopGesture() {
+    gestureThreadRunning_ = false;
+    if (gestureThread_ && gestureThread_->joinable()) {
+        Logd("waiting for process thread to stop");
+        gestureThread_->join();
     }
-    cv_.notify_one();
+    gestureThread_ = nullptr;
+    processer_.enableGestureDetection(false);
 }

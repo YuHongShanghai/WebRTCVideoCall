@@ -12,6 +12,7 @@
 #include "VideoCapturer.h"
 #include "VideoReceiver.h"
 #include "AsrClient.h"
+#include "YoloV10Infer.h"
 
 class MediaController: public QObject {
     Q_OBJECT
@@ -32,10 +33,14 @@ public:
     void startReceiveAudio(int port);
     void stopReceiveAudio();
 
+    void startGesture();
+    void stopGesture();
+
 signals:
     void onRemoteVideoFrame(AVFrame *frame);
     void onLocalVideoFrame(AVFrame *frame);
     void onRemoteAudioFrame(AVFrame *frame);
+    void localGestureResult(Detection result);
 
 private:
     std::unique_ptr<VideoCapturer> videoCapturer_;

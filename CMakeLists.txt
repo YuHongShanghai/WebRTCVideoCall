@@ -7,10 +7,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTORCC ON)
 
+set(3RD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party)
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick Multimedia WebSockets)
 find_package(libdatachannel REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(OpenCV REQUIRED)
 
 set(FFMPEG_ROOT "/opt/homebrew/Cellar/ffmpeg/7.1.1_3")
 include_directories(${FFMPEG_ROOT}/include)
@@ -18,7 +21,7 @@ link_directories(${FFMPEG_ROOT}/lib)
 
 # webrtc audio processing
 # https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing/
-set(WEBRTC_AP_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/webrtc-audio-processing)
+set(WEBRTC_AP_PREFIX ${3RD_DIR}/webrtc-audio-processing)
 
 add_library(webrtc_ap SHARED IMPORTED)
 set_target_properties(webrtc_ap PROPERTIES
@@ -27,6 +30,11 @@ set_target_properties(webrtc_ap PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES
         ${WEBRTC_AP_PREFIX}/include/webrtc-audio-processing
 )
+
+# onnxruntime
+set(ONNXRUNTIME_DIR ${3RD_DIR}/onnxruntime-osx-arm64-1.23.2)
+include_directories(${ONNXRUNTIME_DIR}/include)
+link_directories(${ONNXRUNTIME_DIR}/lib)
 
 # CPP FILE
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -99,7 +107,12 @@ target_link_libraries(appWebRTCClient PRIVATE
 )
 
 target_include_directories(appWebRTCClient PRIVATE ${WEBRTC_AP_PREFIX}/include)
-target_link_libraries(appWebRTCClient PRIVATE webrtc_ap)
+target_link_libraries(appWebRTCClient PRIVATE webrtc_ap onnxruntime ${OpenCV_LIBS})
+
+target_compile_definitions(appWebRTCClient
+        PRIVATE
+        CMAKE_CURRENT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 include(GNUInstallDirs)
 install(TARGETS appWebRTCClient

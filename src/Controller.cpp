@@ -18,6 +18,7 @@ Controller::Controller(QObject *parent) : QObject(parent) {
     connect(client_, &ClientWorker::remoteMessage, this, &Controller::remoteMessage, Qt::QueuedConnection);
     connect(client_, &ClientWorker::remoteVideoEnabled, this, &Controller::onRemoteVideoEnabled, Qt::QueuedConnection);
     connect(client_, &ClientWorker::remoteAudioEnabled, this, &Controller::onRemoteAudioEnabled, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteGesture, this, &Controller::remoteGestureResult, Qt::QueuedConnection);
 
     clientThread_->start();
 
@@ -27,6 +28,7 @@ Controller::Controller(QObject *parent) : QObject(parent) {
     connect(mediaController_, &MediaController::onLocalVideoFrame, this, &Controller::onLocalVideoFrame);
 
     connect(mediaController_, &MediaController::onRemoteAudioFrame, this, &Controller::onRemoteAudioFrame);
+    connect(mediaController_, &MediaController::localGestureResult, this, &Controller::onLocalGestureResult);
 
     audioPlayer_ = new AudioPlayer(this);
     audioProcesser_ = std::make_unique<AudioProcesser>(48000, 2);
@@ -89,6 +91,21 @@ void Controller::setAudioEnabled(bool enabled) {
         client_->notifyAudioEnabled(enabled);
     }
 }
+bool Controller::gestureEnabled() const {
+    return gestureEnabled_;
+}
+
+void Controller::setGestureEnabled(bool enabled) {
+    if (enabled != gestureEnabled_) {
+        gestureEnabled_ = enabled;
+        emit gestureEnabledChanged(gestureEnabled_);
+        if (enabled) {
+            mediaController_->startGesture();
+        } else {
+            mediaController_->stopGesture();
+        }
+    }
+}
 
 void Controller::onRemoteJoined(QString id) {
     emit remoteJoined(id);
@@ -149,7 +166,7 @@ void Controller::updateSwsContext(int width, int height, int format) {
     swsCtx_ = sws_getContext(width, height, (enum AVPixelFormat) format, width, height, AV_PIX_FMT_YUV420P,
                              SWS_BILINEAR, NULL, NULL, NULL);
     if (!swsCtx_) {
-        qDebug() << "sws_getContext failed";
+        Loge("sws_getContext failed");
         return;
     }
     if (yuvFrame_) {
@@ -160,7 +177,7 @@ void Controller::updateSwsContext(int width, int height, int format) {
     yuvFrame_ = av_frame_alloc();
 
     if (!yuvFrame_) {
-        qDebug() << "av_frame_alloc yuv frame failed";
+        Loge("av_frame_alloc yuv frame failed");
         sws_freeContext(swsCtx_);
         swsCtx_ = nullptr;
         return;
@@ -169,7 +186,7 @@ void Controller::updateSwsContext(int width, int height, int format) {
     yuvFrame_->width = width;
     yuvFrame_->height = height;
     if (av_frame_get_buffer(yuvFrame_, 0) < 0) {
-        qDebug() << "av_frame_get_buffer yuv frame failed";
+        Loge("av_frame_get_buffer yuv frame failed");
         av_frame_free(&yuvFrame_);
         sws_freeContext(swsCtx_);
         swsCtx_ = nullptr;
@@ -334,6 +351,14 @@ void Controller::onRemoteAudioEnabled(bool enabled) {
     }
 }
 
+void Controller::onLocalGestureResult(Detection result) {
+    int centerX = result.box.x + result.box.width / 2;
+    int centerY = result.box.y + result.box.height / 2;
+    auto label = QString::fromStdString(result.label);
+    QMetaObject::invokeMethod(client_, "sendGesture", Qt::QueuedConnection, Q_ARG(int, centerX), Q_ARG(int, centerY), Q_ARG(QString, label));
+    emit localGestureResult(centerX, centerY, label);
+}
+
 void Controller::initVideoItem(QObject *mainWindow) {
     if (!mainWindow) {
         Loge("mainWindow is null");
@@ -364,7 +389,7 @@ void Controller::initVideoItem(QObject *mainWindow) {
 }
 
 void Controller::sendMessage(QString message) {
-    client_->sendMessage(message);
+    QMetaObject::invokeMethod(client_, "sendMessage", Qt::QueuedConnection, Q_ARG(QString, message));
 }
 
 void Controller::startAsr() {

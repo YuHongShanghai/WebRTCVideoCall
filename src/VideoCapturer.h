@@ -4,6 +4,7 @@
 
 #ifndef VIDEOCAPTURER_H
 #define VIDEOCAPTURER_H
+#include "VideoProcesser.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -21,12 +22,16 @@ public:
     VideoCapturer(std::function<void(AVFrame*)> callback);
     ~VideoCapturer();
     int init(int rtpPort);
-    void capture();
     void start();
     void stop();
-    void setPaused(bool paused);
+    void setGestureCb(const std::function<void(Detection&)> &callback);
+    void startGesture();
+    void stopGesture();
 
 private:
+    void capture();
+    void gestureRecognition();
+
     AVFormatContext *inFmtCtx_  = nullptr;
     AVCodecContext* decCtx_ = nullptr;
     SwsContext *swsCtx_ = nullptr;
@@ -39,9 +44,12 @@ private:
     std::atomic<bool> running_;
     std::function<void(AVFrame*)> frameCallback_;
 
-    bool paused_ = false;
-    std::mutex mtx_;
-    std::condition_variable cv_;
+    VideoProcesser processer_;
+
+    std::function<void(Detection&)> gestureCallback_ = nullptr;
+    std::thread *gestureThread_ = nullptr;
+    std::mutex gestureMutex_;
+    std::atomic<bool> gestureThreadRunning_;
 };
 
 

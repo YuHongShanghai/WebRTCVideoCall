@@ -26,17 +26,17 @@ public:
     void connectSignalServer();
     void call(std::string id);
     void hungup(bool first = true);
-    void sendMessage(const std::string &msg);
+    void sendData(const std::string &msg);
     void setRoomClientsCallback(std::function<void(std::string)> callback);
     void setPcStateCallback(std::function<void(rtc::PeerConnection::State)> callback);
     void setRemoteCallCallback(std::function<void(std::string)> callback);
-    void setRemoteMessageCallback(std::function<void(std::string)> callback);
+    void setRemoteDataCallback(std::function<void(std::string)> callback);
     std::string localId();
     int videoSrcPort();
     int videoSinkPort();
     int audioSrcPort();
     int audioSinkPort();
-    int sendWsMessage(const std::string &msg);
+    void sendWsMessage(const std::string &msg);
 
 private:
     static std::string randomId(size_t length);
@@ -64,7 +64,7 @@ private:
     std::function<void(std::string)> roomClientsCallback_;
     std::function<void(rtc::PeerConnection::State)> pcStateCallback_;
     std::function<void(std::string)> remoteCallCallback_;
-    std::function<void(std::string)> remoteMessageCallback_;
+    std::function<void(std::string)> remoteDataCallback_;
 
     bool isCaller_ = false;
 

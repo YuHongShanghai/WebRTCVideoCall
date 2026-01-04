@@ -4,8 +4,8 @@ import WebrtcClient 1.0
 
 FramelessWindow {
     id: root
-    width: 800
-    height: 600
+    width: 960
+    height: 540
     visible: true
     title: controller.localId
     color: "#021122"
@@ -84,6 +84,18 @@ FramelessWindow {
             } else {
                 asrPanel.curAsrText = text
             }
+        }
+
+        function onLocalGestureResult(x, y, label) {
+            var scaleX = localGestureLayer.width / 640.0
+            var scaleY = localGestureLayer.height / 640.0
+            localGestureLayer.show(x*scaleX, x*scaleY, label)
+        }
+
+        function onRemoteGestureResult(x, y, label) {
+            var scaleX = remoteGestureLayer.width / 640.0
+            var scaleY = remoteGestureLayer.height / 640.0
+            remoteGestureLayer.show(x*scaleX, x*scaleY, label)
         }
     }
 
@@ -186,6 +198,11 @@ FramelessWindow {
                     font.pixelSize: 20
                 }
             }
+
+            GestureLayer {
+                id: remoteGestureLayer
+                anchors.fill: parent
+            }
         }
 
         MovableVideoItem {
@@ -205,6 +222,11 @@ FramelessWindow {
                     color: "white"
                     font.pixelSize: 20
                 }
+            }
+
+            GestureLayer {
+                id: localGestureLayer
+                anchors.fill: parent
             }
         }
 
@@ -312,12 +334,14 @@ FramelessWindow {
                 hoverEnabled: true
                 background: Rectangle {
                     anchors.fill: parent
-                    color: messageBtn.hovered ? "white" : "transparent"
+                    color: messagePanel.x === root.width ?(messageBtn.hovered ? "white" : "transparent") : "white"
                     radius: 40
 
                     Image {
                         anchors.centerIn: parent
-                        source: messageBtn.hovered ? "qrc:/resources/message_hovered.svg" : "qrc:/resources/message.svg"
+                        source: messagePanel.x === root.width ?
+                            (messageBtn.hovered ? "qrc:/resources/message_hovered.svg" : "qrc:/resources/message.svg") :
+                            "qrc:/resources/message_hovered.svg"
                     }
                 }
                 onClicked: {
@@ -335,12 +359,14 @@ FramelessWindow {
                 hoverEnabled: true
                 background: Rectangle {
                     anchors.fill: parent
-                    color: asrBtn.hovered ? "white" : "transparent"
+                    color: asrPanel.y === -asrPanel.height ? (asrBtn.hovered ? "white" : "transparent") : "white"
                     radius: 40
 
                     Image {
                         anchors.centerIn: parent
-                        source: asrBtn.hovered ? "qrc:/resources/asr_hovered.svg" : "qrc:/resources/asr.svg"
+                        source: asrPanel.y === -asrPanel.height ?
+                            (asrBtn.hovered ? "qrc:/resources/asr_hovered.svg" : "qrc:/resources/asr.svg") :
+                            "qrc:/resources/asr_hovered.svg"
                     }
                 }
                 onClicked: {
@@ -354,6 +380,30 @@ FramelessWindow {
                     }
                 }
             }
+
+            Button {
+                id: gestureBtn
+                width: 80
+                height: 80
+                hoverEnabled: true
+                background: Rectangle {
+                    anchors.fill: parent
+                    color: controller.gestureEnabled ? "white" : (gestureBtn.hovered ? "white" : "transparent")
+                    radius: 40
+
+                    Image {
+                        anchors.centerIn: parent
+                        source: controller.gestureEnabled ?
+                            "qrc:/resources/gesture_hovered.svg" :
+                            (gestureBtn.hovered ? "qrc:/resources/gesture_hovered.svg" : "qrc:/resources/gesture.svg")
+                    }
+                }
+                onClicked: {
+                    controller.gestureEnabled = !controller.gestureEnabled
+                }
+            }
+
+
         }
     }
 

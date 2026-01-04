@@ -20,6 +20,7 @@ class Controller : public QObject
     Q_PROPERTY(bool videoEnabled READ videoEnabled WRITE setVideoEnabled NOTIFY videoEnabledChanged)
     Q_PROPERTY(bool remoteVideoEnabled READ remoteVideoEnabled NOTIFY remoteVideoEnabledChanged)
     Q_PROPERTY(bool audioEnabled READ audioEnabled WRITE setAudioEnabled NOTIFY audioEnabledChanged)
+    Q_PROPERTY(bool gestureEnabled READ gestureEnabled WRITE setGestureEnabled NOTIFY gestureEnabledChanged)
 
 public:
     Controller(QObject *parent = nullptr);
@@ -30,6 +31,8 @@ public:
     bool remoteVideoEnabled() const;
     bool audioEnabled() const;
     void setAudioEnabled(bool enabled);
+    bool gestureEnabled() const;
+    void setGestureEnabled(bool enabled);
 
     Q_INVOKABLE void callRemote(const QString &id);
     Q_INVOKABLE void hungup();
@@ -62,6 +65,7 @@ public slots:
     void onRemoteAudioFrame(AVFrame *frame);
     void onRemoteVideoEnabled(bool enabled);
     void onRemoteAudioEnabled(bool enabled);
+    void onLocalGestureResult(Detection result);
 
 signals:
     void remoteJoined(QString id);
@@ -80,6 +84,9 @@ signals:
     void audioEnabledChanged(bool enabled);
     void remoteAudioEnabledChanged(bool enabled);
     void asrText(const QString &text, bool end);
+    void localGestureResult(int x, int y, QString label);
+    void gestureEnabledChanged(bool enabled);
+    void remoteGestureResult(int x, int y, QString label);
 
 private:
     void startMediaTransport();
@@ -107,6 +114,7 @@ private:
     bool remoteVideoEnabled_ = true;
     bool audioEnabled_ = true;
     bool remoteAudioEnabled_ = true;
+    bool gestureEnabled_ = false;
 
     AsrClient *asrClient_ = nullptr;
 

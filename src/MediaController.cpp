@@ -13,6 +13,10 @@ MediaController::MediaController(QObject *parent): QObject(parent) {
     videoReceiver_ = std::make_unique<VideoReceiver>(std::bind(&MediaController::recvRemoteVideoFrame, this, std::placeholders::_1));
     audioCapturer_ = std::make_unique<AudioCapturer>();
     audioReceiver_ = std::make_unique<AudioReceiver>(std::bind(&MediaController::recvRemoteAudioFrame, this, std::placeholders::_1));
+
+    videoCapturer_->setGestureCb([this](auto &results) {
+        emit localGestureResult(results);
+    });
 }
 
 MediaController::~MediaController() {
@@ -65,6 +69,14 @@ void MediaController::startReceiveAudio(int port) {
 }
 
 void MediaController::stopReceiveAudio() { audioReceiver_->stop(); }
+
+void MediaController::startGesture() {
+    videoCapturer_->startGesture();
+}
+
+void MediaController::stopGesture() {
+    videoCapturer_->stopGesture();
+}
 
 void MediaController::recvRemoteVideoFrame(AVFrame *frame) {
     AVFrame *copy = av_frame_alloc();

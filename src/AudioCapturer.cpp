@@ -230,7 +230,7 @@ void AudioCapturer::capture() {
 
                         ret = av_interleaved_write_frame(outFmtCtx_, opkt);
                         if (ret < 0) {
-                            Loge("av_interleaved_write_frame failed: {}", av_errstr(ret));
+                            // Loge("av_interleaved_write_frame failed: {}", av_errstr(ret));
                         }
                         av_packet_unref(opkt);
                     }

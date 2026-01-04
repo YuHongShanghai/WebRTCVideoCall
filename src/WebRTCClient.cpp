@@ -223,8 +223,8 @@ void WebRTCClient::setupDataChannel() {
         if (std::holds_alternative<std::string>(data)) {
             std::string message = std::get<std::string>(data);
             Logd("received message: {}", message);
-            if (remoteMessageCallback_) {
-                remoteMessageCallback_(message);
+            if (remoteDataCallback_) {
+                remoteDataCallback_(message);
             }
         }
     });
@@ -323,15 +323,16 @@ void WebRTCClient::stopSendMedia() {
     }
     Logd("end");
 }
-void WebRTCClient::sendMessage(const std::string &msg) {
+
+void WebRTCClient::sendData(const std::string &msg) {
     if (dc_) {
         dc_->send(msg);
     }
 }
 
 void WebRTCClient::onMessage(std::string &msg) {
-    if (remoteMessageCallback_) {
-        remoteMessageCallback_(msg);
+    if (remoteDataCallback_) {
+        remoteDataCallback_(msg);
     }
 }
 
@@ -492,8 +493,8 @@ void WebRTCClient::setPcStateCallback(std::function<void(rtc::PeerConnection::St
 
 void WebRTCClient::setRemoteCallCallback(std::function<void(std::string)> callback) { remoteCallCallback_ = callback; }
 
-void WebRTCClient::setRemoteMessageCallback(std::function<void(std::string)> callback) {
-    remoteMessageCallback_ = callback;
+void WebRTCClient::setRemoteDataCallback(std::function<void(std::string)> callback) {
+    remoteDataCallback_ = callback;
 }
 
 std::string WebRTCClient::localId() { return localId_; }
@@ -510,7 +511,7 @@ int WebRTCClient::audioSrcPort() {
 
 int WebRTCClient::audioSinkPort() { return audioRtpConfig_.sinkPort; }
 
-int WebRTCClient::sendWsMessage(const std::string &msg) {
+void WebRTCClient::sendWsMessage(const std::string &msg) {
     ws_->send(msg);
 }
 

@@ -17,7 +17,7 @@ void VideoProcesser::enableGestureDetection(bool enable) {
     if (enable) {
         if (yoloV10Infer_ == nullptr) {
             std::string modelPath = std::string(CMAKE_CURRENT_SOURCE_DIR) + "/models/YOLOv10n_gestures.onnx";
-            yoloV10Infer_ = std::make_unique<YoloV10Infer>(modelPath);
+            yoloV10Infer_ = std::make_unique<GestureInfer>(modelPath);
         }
     } else {
         yoloV10Infer_ = nullptr;

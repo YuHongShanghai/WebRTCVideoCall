@@ -13,10 +13,10 @@ struct Detection {
     std::string label;
 };
 
-class YoloV10Infer {
+class GestureInfer {
 public:
-    YoloV10Infer(const std::string& modelPath);
-    ~YoloV10Infer();
+    GestureInfer(const std::string& modelPath);
+    ~GestureInfer();
     Detection infer(AVFrame* frame);
 
 private:

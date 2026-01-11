@@ -1,14 +1,13 @@
-#include "YoloV10Infer.h"
+#include "GestureInfer.h"
 
 #include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
 
 #include <fstream>
-#include <algorithm>
 #include "Logger.h"
 
-YoloV10Infer::YoloV10Infer(const std::string& modelPath)
-    : env_(ORT_LOGGING_LEVEL_WARNING, "yolov10"),
+GestureInfer::GestureInfer(const std::string& modelPath)
+    : env_(ORT_LOGGING_LEVEL_WARNING, "gesture"),
       session_(nullptr),
       memoryInfo_(Ort::MemoryInfo::CreateCpu(
           OrtDeviceAllocator, OrtMemTypeCPU))
@@ -65,7 +64,7 @@ YoloV10Infer::YoloV10Infer(const std::string& modelPath)
         "no_gesture"};
 }
 
-Detection YoloV10Infer::infer(AVFrame *frame) {
+Detection GestureInfer::infer(AVFrame *frame) {
     if (!frame || !frame->data[0]) {
         Loge("no data");
         return {};
@@ -183,13 +182,13 @@ Detection YoloV10Infer::infer(AVFrame *frame) {
     return result;
 }
 
-YoloV10Infer::~YoloV10Infer() {
+GestureInfer::~GestureInfer() {
     if (swsCtx_) {
         sws_freeContext(swsCtx_);
     }
 }
 
-void YoloV10Infer::initSws(AVFrame *frame) {
+void GestureInfer::initSws(AVFrame *frame) {
     swsCtx_ = sws_getCachedContext(nullptr, frame->width, frame->height,
                                            static_cast<AVPixelFormat>(frame->format), frame->width, frame->height,
                                            AV_PIX_FMT_RGB24, SWS_BILINEAR, nullptr, nullptr, nullptr);

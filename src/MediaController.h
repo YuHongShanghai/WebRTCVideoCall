@@ -7,12 +7,12 @@
 #include <thread>
 #include <QObject>
 
+#include "AsrClient.h"
 #include "AudioCapturer.h"
 #include "AudioReceiver.h"
+#include "GestureInfer.h"
 #include "VideoCapturer.h"
 #include "VideoReceiver.h"
-#include "AsrClient.h"
-#include "YoloV10Infer.h"
 
 class MediaController: public QObject {
     Q_OBJECT

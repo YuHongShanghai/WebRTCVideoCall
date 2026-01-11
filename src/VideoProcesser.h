@@ -5,7 +5,7 @@
 #ifndef VIDEOPROCERSSER_H
 #define VIDEOPROCERSSER_H
 
-#include "YoloV10Infer.h"
+#include "GestureInfer.h"
 
 class VideoProcesser {
 public:
@@ -15,7 +15,7 @@ public:
     void enableGestureDetection(bool enable);
 
 private:
-    std::unique_ptr<YoloV10Infer> yoloV10Infer_;
+    std::unique_ptr<GestureInfer> yoloV10Infer_;
 };
 
 

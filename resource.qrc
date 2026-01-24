@@ -29,5 +29,7 @@
         <file>resources/gesture_fist.svg</file>
         <file>resources/gesture.svg</file>
         <file>resources/gesture_hovered.svg</file>
+        <file>resources/bg.svg</file>
+        <file>resources/bg_hovered.svg</file>
     </qresource>
 </RCC>

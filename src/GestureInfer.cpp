@@ -6,12 +6,13 @@
 #include <fstream>
 #include "Logger.h"
 
-GestureInfer::GestureInfer(const std::string& modelPath)
+GestureInfer::GestureInfer()
     : env_(ORT_LOGGING_LEVEL_WARNING, "gesture"),
       session_(nullptr),
       memoryInfo_(Ort::MemoryInfo::CreateCpu(
           OrtDeviceAllocator, OrtMemTypeCPU))
 {
+    std::string modelPath = std::string(CMAKE_CURRENT_SOURCE_DIR) + "/models/YOLOv10n_gestures.onnx";
     inputWidth_  = 640;
     inputHeight_ = 640;
 

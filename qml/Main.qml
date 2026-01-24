@@ -403,6 +403,28 @@ FramelessWindow {
                 }
             }
 
+            Button {
+                id: bgBtn
+                width: 80
+                height: 80
+                hoverEnabled: true
+                background: Rectangle {
+                    anchors.fill: parent
+                    color: controller.bgEnabled ? "white" : (bgBtn.hovered ? "white" : "transparent")
+                    radius: 40
+
+                    Image {
+                        anchors.centerIn: parent
+                        source: controller.bgEnabled ?
+                            "qrc:/resources/bg_hovered.svg" :
+                            (bgBtn.hovered ? "qrc:/resources/bg_hovered.svg" : "qrc:/resources/bg.svg")
+                    }
+                }
+                onClicked: {
+                    controller.bgEnabled = !controller.bgEnabled
+                }
+            }
+
 
         }
     }

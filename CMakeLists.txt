@@ -15,6 +15,25 @@ find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(OpenCV REQUIRED)
 
+if(APPLE)
+    # Apple Silicon 默认路径 /opt/homebrew
+    if(EXISTS "/opt/homebrew/opt/libomp")
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
+        set(OpenMP_C_LIB_NAMES "omp")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_omp_LIBRARY "/opt/homebrew/opt/libomp/lib/libomp.dylib")
+        # Intel Mac 默认路径 /usr/local
+    elseif(EXISTS "/usr/local/opt/libomp")
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
+        set(OpenMP_C_LIB_NAMES "omp")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_omp_LIBRARY "/usr/local/opt/libomp/lib/libomp.dylib")
+    endif()
+endif()
+find_package(OpenMP)
+
 set(FFMPEG_ROOT "/opt/homebrew/Cellar/ffmpeg@7/7.1.3")
 include_directories(${FFMPEG_ROOT}/include)
 link_directories(${FFMPEG_ROOT}/lib)
@@ -108,6 +127,13 @@ target_link_libraries(appWebRTCClient PRIVATE
 
 target_include_directories(appWebRTCClient PRIVATE ${WEBRTC_AP_PREFIX}/include)
 target_link_libraries(appWebRTCClient PRIVATE webrtc_ap onnxruntime ${OpenCV_LIBS})
+
+if(OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found: ${OpenMP_CXX_VERSION}")
+    target_link_libraries(appWebRTCClient PRIVATE OpenMP::OpenMP_CXX)
+else()
+    message(WARNING "OpenMP not found, building without OpenMP support")
+endif()
 
 target_compile_definitions(appWebRTCClient
         PRIVATE

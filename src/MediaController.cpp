@@ -74,8 +74,10 @@ void MediaController::startGesture() {
     videoCapturer_->startGesture();
 }
 
-void MediaController::stopGesture() {
-    videoCapturer_->stopGesture();
+void MediaController::stopGesture() { videoCapturer_->stopGesture(); }
+
+void MediaController::setBgEnabled(bool enabled) {
+    videoCapturer_->setBgEnabled(enabled);
 }
 
 void MediaController::recvRemoteVideoFrame(AVFrame *frame) {

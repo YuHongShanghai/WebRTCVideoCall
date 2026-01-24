@@ -4,6 +4,23 @@
 
 #include "ClientInfo.h"
 #include "magic_enum.hpp"
+#include "util.h"
+
+static AVFrame* alloc_out_frame_like(const AVFrame* in) {
+    AVFrame* out = av_frame_alloc();
+    out->format = in->format;     // 输出保持与输入相同像素格式
+    out->width  = in->width;
+    out->height = in->height;
+
+    // 为 out->data / out->linesize 分配缓冲
+    // 32 对齐通常更友好
+    int ret = av_frame_get_buffer(out, 32);
+    if (ret < 0) {
+        av_frame_free(&out);
+        return nullptr;
+    }
+    return out;
+}
 
 VideoCapturer::VideoCapturer(std::function<void(AVFrame*)> callback): frameCallback_(callback) {}
 
@@ -160,19 +177,22 @@ void VideoCapturer::capture() {
             std::lock_guard lock(gestureMutex_);
             sws_scale(swsCtx_, decFrame->data, decFrame->linesize, 0, decCtx_->height, yuvFrame_->data,
                       yuvFrame_->linesize);
-            yuvFrame_->pts = frameIndex++;
+            AVFrame* processed = alloc_out_frame_like(yuvFrame_);
+            processer_.segmentation(yuvFrame_, processed);
+            processed->pts = frameIndex++;
 
             if (frameCallback_) {
-                frameCallback_(yuvFrame_);
+                frameCallback_(processed);
             }
 
             // 编码
-            if (avcodec_send_frame(encCtx_, yuvFrame_) == 0) {
+            if (avcodec_send_frame(encCtx_, processed) == 0) {
                 while (avcodec_receive_packet(encCtx_, outPkt) == 0) {
                     outPkt->stream_index = outStream_->index;
                     av_interleaved_write_frame(outFmtCtx_, outPkt);
                     av_packet_unref(outPkt);
                 }
+                av_frame_free(&processed);
             }
             av_frame_unref(decFrame);
         }
@@ -230,6 +250,7 @@ void VideoCapturer::stop() {
         gestureThread_->join();
     }
     gestureThread_ = nullptr;
+    setBgEnabled(false);
 
     av_write_trailer(outFmtCtx_);
 
@@ -262,4 +283,8 @@ void VideoCapturer::stopGesture() {
     }
     gestureThread_ = nullptr;
     processer_.enableGestureDetection(false);
+}
+
+void VideoCapturer::setBgEnabled(bool enabled) {
+    processer_.enableSegmentation(enabled);
 }

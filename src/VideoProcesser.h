@@ -6,16 +6,20 @@
 #define VIDEOPROCERSSER_H
 
 #include "GestureInfer.h"
+#include "SegInfer.h"
 
 class VideoProcesser {
 public:
     VideoProcesser();
     ~VideoProcesser();
     Detection gestureRecognition(AVFrame *frame);
+    void segmentation(AVFrame *inFrame, AVFrame *outFrame);
     void enableGestureDetection(bool enable);
+    void enableSegmentation(bool enable);
 
 private:
-    std::unique_ptr<GestureInfer> yoloV10Infer_;
+    std::unique_ptr<GestureInfer> gestureInfer_;
+    std::unique_ptr<SegInfer> segInfer_;
 };
 
 

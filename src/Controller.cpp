@@ -107,6 +107,18 @@ void Controller::setGestureEnabled(bool enabled) {
     }
 }
 
+bool Controller::bgEnabled() const {
+    return bgEnabled_;
+}
+
+void Controller::setBgEnabled(bool enabled) {
+    if (enabled != bgEnabled_) {
+        bgEnabled_ = enabled;
+        mediaController_->setBgEnabled(enabled);
+        emit bgEnabledChanged(bgEnabled_);
+    }
+}
+
 void Controller::onRemoteJoined(QString id) {
     emit remoteJoined(id);
 }

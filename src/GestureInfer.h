@@ -15,7 +15,7 @@ struct Detection {
 
 class GestureInfer {
 public:
-    GestureInfer(const std::string& modelPath);
+    GestureInfer();
     ~GestureInfer();
     Detection infer(AVFrame* frame);
 

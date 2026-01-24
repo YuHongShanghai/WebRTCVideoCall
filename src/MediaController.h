@@ -35,6 +35,7 @@ public:
 
     void startGesture();
     void stopGesture();
+    void setBgEnabled(bool enabled);
 
 signals:
     void onRemoteVideoFrame(AVFrame *frame);

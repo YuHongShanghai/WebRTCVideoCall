@@ -27,6 +27,7 @@ public:
     void setGestureCb(const std::function<void(Detection&)> &callback);
     void startGesture();
     void stopGesture();
+    void setBgEnabled(bool enabled);
 
 private:
     void capture();

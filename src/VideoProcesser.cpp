@@ -4,22 +4,45 @@
 
 #include "VideoProcesser.h"
 
+#include <QFile>
+
 VideoProcesser::VideoProcesser() {
 }
 
 VideoProcesser::~VideoProcesser() {}
 
 Detection VideoProcesser::gestureRecognition(AVFrame *frame) {
-    return yoloV10Infer_ ? yoloV10Infer_->infer(frame) : Detection();
+    return gestureInfer_ ? gestureInfer_->infer(frame) : Detection();
+}
+
+void VideoProcesser::segmentation(AVFrame *inFrame, AVFrame *outFrame) {
+    if (outFrame == nullptr || segInfer_ == nullptr) {
+        av_frame_ref(outFrame, inFrame);
+        return;
+    }
+
+    if (!segInfer_->infer(inFrame, outFrame)) {
+        av_frame_ref(outFrame, inFrame);
+    }
 }
 
 void VideoProcesser::enableGestureDetection(bool enable) {
     if (enable) {
-        if (yoloV10Infer_ == nullptr) {
-            std::string modelPath = std::string(CMAKE_CURRENT_SOURCE_DIR) + "/models/YOLOv10n_gestures.onnx";
-            yoloV10Infer_ = std::make_unique<GestureInfer>(modelPath);
+        if (gestureInfer_ == nullptr) {
+            gestureInfer_ = std::make_unique<GestureInfer>();
         }
     } else {
-        yoloV10Infer_ = nullptr;
+        gestureInfer_ = nullptr;
+    }
+}
+
+void VideoProcesser::enableSegmentation(bool enable) {
+    if (enable) {
+        if (segInfer_ == nullptr) {
+            segInfer_ = std::make_unique<SegInfer>();
+            segInfer_->setBgImgPath(std::string(CMAKE_CURRENT_SOURCE_DIR) + "/resources/seg_bg.jpg");
+        }
+    } else {
+        segInfer_ = nullptr;
     }
 }

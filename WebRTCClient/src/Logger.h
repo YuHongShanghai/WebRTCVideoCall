@@ -35,22 +35,22 @@ public:
 
     template<typename... Args>
     static void logd(const std::string& tag, const std::string& fmt_str, Args&&... args) {
-        s_logger->log(spdlog::level::debug, "[{}] {}", tag, fmt::format(fmt_str, std::forward<Args>(args)...));
+        s_logger->log(spdlog::level::debug, "[{}] {}", tag, fmt::format(fmt::runtime(fmt_str), std::forward<Args>(args)...));
     }
 
     template<typename... Args>
     static void logi(const std::string& tag, const std::string& fmt_str, Args&&... args) {
-        s_logger->log(spdlog::level::info, "[{}] {}", tag, fmt::format(fmt_str, std::forward<Args>(args)...));
+        s_logger->log(spdlog::level::info, "[{}] {}", tag, fmt::format(fmt::runtime(fmt_str), std::forward<Args>(args)...));
     }
 
     template<typename... Args>
     static void logw(const std::string& tag, const std::string& fmt_str, Args&&... args) {
-        s_logger->log(spdlog::level::warn, "[{}] {}", tag, fmt::format(fmt_str, std::forward<Args>(args)...));
+        s_logger->log(spdlog::level::warn, "[{}] {}", tag, fmt::format(fmt::runtime(fmt_str), std::forward<Args>(args)...));
     }
 
     template<typename... Args>
     static void loge(const std::string& tag, const std::string& fmt_str, Args&&... args) {
-        s_logger->log(spdlog::level::err, "[{}] {}", tag, fmt::format(fmt_str, std::forward<Args>(args)...));
+        s_logger->log(spdlog::level::err, "[{}] {}", tag, fmt::format(fmt::runtime(fmt_str), std::forward<Args>(args)...));
     }
 
     static void logendl() {

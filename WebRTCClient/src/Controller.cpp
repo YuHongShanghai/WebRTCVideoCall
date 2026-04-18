@@ -2,36 +2,62 @@
 
 #include "ClientInfo.h"
 #include "Logger.h"
-#include "magic_enum.hpp"
 #include "util.h"
+#include "requestPermissions.h"
+
+#include <QTimer>
+
+extern "C" {
+#include <libavutil/frame.h>
+#include <libswscale/swscale.h>
+#include <libavutil/imgutils.h>
+}
 
 Controller::Controller(QObject *parent) : QObject(parent) {
-    client_ = new ClientWorker();
+    // ── 创建 ClientWorker（运行在独立线程）─────────────────
+    client_       = new ClientWorker();
     clientThread_ = new QThread;
     client_->moveToThread(clientThread_);
-    connect(client_, &ClientWorker::remoteJoined, this, &Controller::onRemoteJoined, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteLeft, this, &Controller::onRemoteLeft, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteIds, this, &Controller::onRemoteIds, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::pcStateChanged, this, &Controller::onPcStateChanged, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteCall, this, &Controller::onRemoteCall, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::pcClosed, this, &Controller::onPcClosed, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteMessage, this, &Controller::remoteMessage, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteVideoEnabled, this, &Controller::onRemoteVideoEnabled, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteAudioEnabled, this, &Controller::onRemoteAudioEnabled, Qt::QueuedConnection);
-    connect(client_, &ClientWorker::remoteGesture, this, &Controller::remoteGestureResult, Qt::QueuedConnection);
+
+    connect(client_, &ClientWorker::remoteJoined,  this, &Controller::onRemoteJoined,  Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteLeft,    this, &Controller::onRemoteLeft,    Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteIds,     this, &Controller::onRemoteIds,     Qt::QueuedConnection);
+    connect(client_, &ClientWorker::pcStateChanged,this, &Controller::onPcStateChanged,Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteCall,    this, &Controller::onRemoteCall,    Qt::QueuedConnection);
+    connect(client_, &ClientWorker::pcClosed,      this, &Controller::onPcClosed,      Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteMessage, this, &Controller::remoteMessage,   Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteVideoEnabled,
+            this, &Controller::onRemoteVideoEnabled, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteAudioEnabled,
+            this, &Controller::onRemoteAudioEnabled, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteGesture,
+            this, &Controller::remoteGestureResult,  Qt::QueuedConnection);
+
+    // 远端媒体帧（libwebrtc 解码后推来）
+    connect(client_, &ClientWorker::remoteVideoFrame,
+            this, &Controller::onRemoteVideoFrame, Qt::QueuedConnection);
+    connect(client_, &ClientWorker::remoteAudioData,
+            this, &Controller::onRemoteAudioData,  Qt::QueuedConnection);
 
     clientThread_->start();
-
     QMetaObject::invokeMethod(client_, "init", Qt::QueuedConnection);
+
+    // ── 创建 MediaController（摄像头采集）─────────────────
     mediaController_ = new MediaController(this);
-    connect(mediaController_, &MediaController::onRemoteVideoFrame, this, &Controller::onRemoteVideoFrame);
-    connect(mediaController_, &MediaController::onLocalVideoFrame, this, &Controller::onLocalVideoFrame);
+    connect(mediaController_, &MediaController::onLocalVideoFrame,
+            this, &Controller::onLocalVideoFrame);
+    connect(mediaController_, &MediaController::localGestureResult,
+            this, &Controller::onLocalGestureResult);
 
-    connect(mediaController_, &MediaController::onRemoteAudioFrame, this, &Controller::onRemoteAudioFrame);
-    connect(mediaController_, &MediaController::localGestureResult, this, &Controller::onLocalGestureResult);
-
-    audioPlayer_ = new AudioPlayer(this);
-    audioProcesser_ = std::make_unique<AudioProcesser>(48000, 2);
+    // 延迟到主 run loop 启动后再请求权限并初始化摄像头：
+    // 1. app.exec() 尚未调用时 AVFoundation 无法弹出权限对话框
+    // 2. requestAVPermissions() 内部用 dispatch_semaphore 阻塞直到用户响应，
+    //    需在 run loop 已启动的状态下调用（否则 UI 事件无法处理）
+    // 3. 权限确认后立即 init/start 摄像头
+    QTimer::singleShot(0, this, [this]() {
+        requestAVPermissions();             // 等待用户点"允许"（已授权则立即返回）
+        mediaController_->startCaptureVideo();
+    });
 }
 
 Controller::~Controller() {
@@ -46,104 +72,76 @@ Controller::~Controller() {
         av_frame_unref(yuvFrame_);
         av_frame_free(&yuvFrame_);
     }
-    if (swsCtx_) {
-        sws_freeContext(swsCtx_);
-    }
-    if (swrCtx_) {
-        swr_free(&swrCtx_);
-    }
+    if (swsCtx_) sws_freeContext(swsCtx_);
 }
+
+// ── 属性 ─────────────────────────────────────────────────
 
 QString Controller::localId() const { return client_->getLocalId(); }
 
-bool Controller::videoEnabled() const {
-    return videoEnabled_;
-}
+bool Controller::videoEnabled()      const { return videoEnabled_; }
+bool Controller::remoteVideoEnabled()const { return remoteVideoEnabled_; }
+bool Controller::audioEnabled()      const { return audioEnabled_; }
+bool Controller::gestureEnabled()    const { return gestureEnabled_; }
+bool Controller::bgEnabled()         const { return bgEnabled_; }
 
 void Controller::setVideoEnabled(bool enabled) {
-    if (enabled != videoEnabled_) {
-        videoEnabled_ = enabled;
-        emit videoEnabledChanged(videoEnabled_);
-        if (enabled) {
-            mediaController_->startCaptureVideo(client_->getVideoSrcPort());
-        } else {
-            mediaController_->stopCaptureVideo();
-        }
-        client_->notifyVideoEnabled(enabled);
+    if (enabled == videoEnabled_) return;
+    videoEnabled_ = enabled;
+    emit videoEnabledChanged(videoEnabled_);
+    if (enabled) {
+        mediaController_->startCaptureVideo(
+            [this](AVFrame *frame) {
+                QMetaObject::invokeMethod(
+                    client_, [this, frame]() { client_->pushVideoFrame(frame); },
+                    Qt::QueuedConnection);
+            });
+    } else {
+        mediaController_->stopCaptureVideo();
     }
-}
-
-bool Controller::remoteVideoEnabled() const { return remoteVideoEnabled_; }
-
-bool Controller::audioEnabled() const {
-    return audioEnabled_;
+    client_->notifyVideoEnabled(enabled);
 }
 
 void Controller::setAudioEnabled(bool enabled) {
-    if (enabled != audioEnabled_) {
-        audioEnabled_ = enabled;
-        emit audioEnabledChanged(audioEnabled_);
-        if (enabled) {
-            mediaController_->startCaptureAudio(client_->getAudioSrcPort());
-        } else {
-            mediaController_->stopCaptureAudio();
-        }
-        client_->notifyAudioEnabled(enabled);
-    }
-}
-bool Controller::gestureEnabled() const {
-    return gestureEnabled_;
+    if (enabled == audioEnabled_) return;
+    audioEnabled_ = enabled;
+    emit audioEnabledChanged(audioEnabled_);
+    // libwebrtc ADM 控制麦克风，此处仅通知对端
+    client_->notifyAudioEnabled(enabled);
 }
 
 void Controller::setGestureEnabled(bool enabled) {
-    if (enabled != gestureEnabled_) {
-        gestureEnabled_ = enabled;
-        emit gestureEnabledChanged(gestureEnabled_);
-        if (enabled) {
-            mediaController_->startGesture();
-        } else {
-            mediaController_->stopGesture();
-        }
-    }
-}
-
-bool Controller::bgEnabled() const {
-    return bgEnabled_;
+    if (enabled == gestureEnabled_) return;
+    gestureEnabled_ = enabled;
+    emit gestureEnabledChanged(gestureEnabled_);
+    if (enabled) mediaController_->startGesture();
+    else         mediaController_->stopGesture();
 }
 
 void Controller::setBgEnabled(bool enabled) {
-    if (enabled != bgEnabled_) {
-        bgEnabled_ = enabled;
-        mediaController_->setBgEnabled(enabled);
-        emit bgEnabledChanged(bgEnabled_);
-    }
+    if (enabled == bgEnabled_) return;
+    bgEnabled_ = enabled;
+    mediaController_->setBgEnabled(enabled);
+    emit bgEnabledChanged(bgEnabled_);
 }
 
-void Controller::onRemoteJoined(QString id) {
-    emit remoteJoined(id);
-}
+// ── 槽 ───────────────────────────────────────────────────
 
-void Controller::onRemoteLeft(QString id) {
-    emit remoteLeft(id);
-}
+void Controller::onRemoteJoined(QString id) { emit remoteJoined(id); }
+void Controller::onRemoteLeft(QString id)   { emit remoteLeft(id); }
+void Controller::onRemoteIds(QStringList ids) { emit remoteIds(ids); }
 
-void Controller::onRemoteIds(QStringList ids) {
-    emit remoteIds(ids);
-}
-
-void Controller::onPcStateChanged(rtc::PeerConnection::State state) {
+void Controller::onPcStateChanged(int state) {
     emit pcStateChanged(static_cast<PcState>(state));
-    Logd("onPcStateChanged {}", magic_enum::enum_name(state));
-    if (state == rtc::PeerConnection::State::Connected) {
+    Logd("onPcStateChanged state={}", state);
+    if (state == static_cast<int>(Connected)) {
         startMediaTransport();
-    } else if (state == rtc::PeerConnection::State::Closed) {
+    } else if (state == static_cast<int>(Closed)) {
         stopMediaTransport();
     }
 }
 
-void Controller::onRemoteCall(QString id) {
-    emit remoteCall(id);
-}
+void Controller::onRemoteCall(QString id) { emit remoteCall(id); }
 
 void Controller::onPcClosed(QString id) {
     stopMediaTransport();
@@ -151,87 +149,46 @@ void Controller::onPcClosed(QString id) {
 }
 
 void Controller::startMediaTransport() {
-    localVideoWidth_ = 0;
+    localVideoWidth_  = 0;
     localVideoHeight_ = 0;
-    remoteVideoWidth_ = 0;
-    remoteVideoHeight_ = 0;
-    mediaController_->startCaptureVideo(client_->getVideoSrcPort());
-    mediaController_->startReceiveVideo(client_->getVideoSinkPort());
-    mediaController_->startCaptureAudio(client_->getAudioSrcPort());
-    mediaController_->startReceiveAudio(client_->getAudioSinkPort());
+
+    // 启动摄像头，同时推给 libwebrtc
+    mediaController_->startCaptureVideo(
+        [this](AVFrame *frame) {
+            // webrtcCallback_ 在任意线程调用，直接调用（线程安全）
+            client_->pushVideoFrame(frame);
+        });
 }
 
 void Controller::stopMediaTransport() {
-    Logd("start");
+    Logd("stopMediaTransport");
     stopAsr();
     mediaController_->stopCaptureVideo();
-    mediaController_->stopReceiveVideo();
-    mediaController_->stopCaptureAudio();
-    mediaController_->stopReceiveAudio();
-    Logd("end");
 }
 
 void Controller::updateSwsContext(int width, int height, int format) {
-    if (swsCtx_) {
-        sws_freeContext(swsCtx_);
-    }
-    swsCtx_ = sws_getContext(width, height, (enum AVPixelFormat) format, width, height, AV_PIX_FMT_YUV420P,
-                             SWS_BILINEAR, NULL, NULL, NULL);
-    if (!swsCtx_) {
-        Loge("sws_getContext failed");
-        return;
-    }
-    if (yuvFrame_) {
-        av_frame_unref(yuvFrame_);
-        av_frame_free(&yuvFrame_);
-    }
+    if (swsCtx_) sws_freeContext(swsCtx_);
+    swsCtx_ = sws_getContext(
+        width, height, static_cast<AVPixelFormat>(format),
+        width, height, AV_PIX_FMT_YUV420P,
+        SWS_BILINEAR, nullptr, nullptr, nullptr);
 
+    if (yuvFrame_) { av_frame_unref(yuvFrame_); av_frame_free(&yuvFrame_); }
     yuvFrame_ = av_frame_alloc();
-
-    if (!yuvFrame_) {
-        Loge("av_frame_alloc yuv frame failed");
-        sws_freeContext(swsCtx_);
-        swsCtx_ = nullptr;
-        return;
-    }
     yuvFrame_->format = AV_PIX_FMT_YUV420P;
-    yuvFrame_->width = width;
+    yuvFrame_->width  = width;
     yuvFrame_->height = height;
     if (av_frame_get_buffer(yuvFrame_, 0) < 0) {
-        Loge("av_frame_get_buffer yuv frame failed");
+        Loge("av_frame_get_buffer failed");
         av_frame_free(&yuvFrame_);
         sws_freeContext(swsCtx_);
         swsCtx_ = nullptr;
-        yuvFrame_ = nullptr;
     }
-}
-
-void Controller::initSwrContext(AVFrame *frame) {
-    swrCtx_ = swr_alloc();
-    av_opt_set_chlayout(swrCtx_, "in_chlayout",  &frame->ch_layout, 0);
-    av_opt_set_int      (swrCtx_, "in_sample_rate", frame->sample_rate, 0);
-    av_opt_set_sample_fmt(swrCtx_, "in_sample_fmt", (AVSampleFormat)frame->format, 0);
-
-    // out: 固定 S16 立体声
-    AVChannelLayout outCh;
-    av_channel_layout_from_mask(&outCh, AV_CH_LAYOUT_STEREO);
-    av_opt_set_chlayout(swrCtx_, "out_chlayout", &outCh, 0);
-    av_opt_set_int      (swrCtx_, "out_sample_rate", frame->sample_rate, 0);
-    av_opt_set_sample_fmt(swrCtx_, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
-
-    int ret = swr_init(swrCtx_);
-    if (ret < 0) {
-        Loge("init swr_init failed: {}", av_errstr(ret));
-        swr_free(&swrCtx_);
-        swrCtx_ = nullptr;
-        return;
-    }
-
-    swrBuffer_.resize(MAX_OUT_SAMPLES*2);
 }
 
 void Controller::callRemote(const QString &id) {
-    QMetaObject::invokeMethod(client_, "call", Qt::QueuedConnection, Q_ARG(QString, id));
+    QMetaObject::invokeMethod(client_, "call", Qt::QueuedConnection,
+                              Q_ARG(QString, id));
 }
 
 void Controller::hungup() {
@@ -240,19 +197,23 @@ void Controller::hungup() {
 }
 
 void Controller::onRemoteVideoFrame(AVFrame *frame) {
+    if (!frame) return;
     if (remoteVideoWidth_ != frame->width || remoteVideoHeight_ != frame->height) {
-        remoteVideoWidth_ = frame->width;
+        remoteVideoWidth_  = frame->width;
         remoteVideoHeight_ = frame->height;
-        Logd("videoSizeChanged: {} x {}", remoteVideoWidth_, remoteVideoHeight_);
+        Logd("remote video size: {}x{}", remoteVideoWidth_, remoteVideoHeight_);
         updateSwsContext(remoteVideoWidth_, remoteVideoHeight_, frame->format);
         emit remoteVideoSizeChanged(remoteVideoWidth_, remoteVideoHeight_);
     }
+
     YUVData yuvData;
     if (frame->format == AV_PIX_FMT_YUV420P) {
         extractYUVFromAVFrame(frame, yuvData);
-    } else {
-        sws_scale(swsCtx_, (const uint8_t *const *) frame->data, frame->linesize, 0, remoteVideoHeight_, yuvFrame_->data,
-                  yuvFrame_->linesize);
+    } else if (swsCtx_) {
+        sws_scale(swsCtx_,
+                  (const uint8_t *const *)frame->data, frame->linesize,
+                  0, remoteVideoHeight_,
+                  yuvFrame_->data, yuvFrame_->linesize);
         extractYUVFromAVFrame(yuvFrame_, yuvData);
     }
     emit receiveRemoteYuvData(yuvData);
@@ -261,10 +222,10 @@ void Controller::onRemoteVideoFrame(AVFrame *frame) {
 }
 
 void Controller::onLocalVideoFrame(AVFrame *frame) {
+    if (!frame) return;
     if (localVideoWidth_ != frame->width || localVideoHeight_ != frame->height) {
-        localVideoWidth_ = frame->width;
+        localVideoWidth_  = frame->width;
         localVideoHeight_ = frame->height;
-        Logd("videoSizeChanged: {} x {}", localVideoWidth_, localVideoHeight_);
         emit localVideoSizeChanged(localVideoWidth_, localVideoHeight_);
     }
     YUVData yuvData;
@@ -276,132 +237,97 @@ void Controller::onLocalVideoFrame(AVFrame *frame) {
     av_frame_free(&frame);
 }
 
+void Controller::onRemoteAudioData(const void *data, int bits, int rate,
+                                    size_t channels, size_t frames) {
+    // 仅用于 ASR（语音识别）
+    // libwebrtc ADM 已负责音频播放，此处只做 ASR 推送
+    if (!asrClient_) return;
+
+    // 将裸 PCM 包装成 AVFrame 送给 AsrClient（其内部会做重采样）
+    AVFrame *avf = av_frame_alloc();
+    avf->format      = AV_SAMPLE_FMT_S16;
+    avf->sample_rate = rate;
+    avf->nb_samples  = static_cast<int>(frames);
+    av_channel_layout_default(&avf->ch_layout,
+                               static_cast<int>(channels));
+
+    // 分配缓冲并复制
+    if (av_frame_get_buffer(avf, 0) >= 0) {
+        size_t byteCount = frames * channels * (bits / 8);
+        memcpy(avf->data[0], data, byteCount);
+        asrClient_->pushAudioFrame(avf);
+    }
+    av_frame_unref(avf);
+    av_frame_free(&avf);
+}
+
 void Controller::extractYUVFromAVFrame(AVFrame *frame, YUVData &yuv) {
-    // 提取行大小和高度
     yuv.yLineSize = frame->linesize[0];
     yuv.uLineSize = frame->linesize[1];
     yuv.vLineSize = frame->linesize[2];
-    yuv.height = frame->height;
+    yuv.height    = frame->height;
 
-    int chromaHeight = frame->height / 2;
+    int chromaH = frame->height / 2;
 
-    // 拷贝 Y 分量
+    // 每个平面在内存中连续（av_frame_get_buffer 保证），直接整块拷贝
     yuv.Y.resize(yuv.yLineSize * frame->height);
-    for (int i = 0; i < frame->height; ++i) {
-        memcpy(yuv.Y.data() + i * yuv.yLineSize, frame->data[0] + i * frame->linesize[0], yuv.yLineSize);
-    }
+    memcpy(yuv.Y.data(), frame->data[0], yuv.yLineSize * frame->height);
 
-    // 拷贝 U 分量
-    yuv.U.resize(yuv.uLineSize * chromaHeight);
-    for (int i = 0; i < chromaHeight; ++i) {
-        memcpy(yuv.U.data() + i * yuv.uLineSize, frame->data[1] + i * frame->linesize[1], yuv.uLineSize);
-    }
+    yuv.U.resize(yuv.uLineSize * chromaH);
+    memcpy(yuv.U.data(), frame->data[1], yuv.uLineSize * chromaH);
 
-    // 拷贝 V 分量
-    yuv.V.resize(yuv.vLineSize * chromaHeight);
-    for (int i = 0; i < chromaHeight; ++i) {
-        memcpy(yuv.V.data() + i * yuv.vLineSize, frame->data[2] + i * frame->linesize[2], yuv.vLineSize);
-    }
-}
-
-void Controller::onRemoteAudioFrame(AVFrame *frame) {
-    if (asrClient_) {
-        asrClient_->pushAudioFrame(frame);
-    }
-
-    if (swrCtx_ == nullptr) {
-        initSwrContext(frame);
-    }
-
-    if (swrCtx_ == nullptr) {
-        Loge("swrCtx is null");
-        return;
-    }
-
-    uint8_t *out_data[1];
-    out_data[0] = reinterpret_cast<uint8_t *>(swrBuffer_.data());
-
-    int converted = swr_convert(swrCtx_, out_data, MAX_OUT_SAMPLES, (const uint8_t **) frame->data, frame->nb_samples);
-    if (converted < 0) {
-        Loge("swr_convert error");
-        return;
-    }
-
-    if (converted == 0)
-        return;
-
-    audioProcesser_->process(swrBuffer_.data(), swrBuffer_.data(), converted);
-
-    int outChannels = 2;
-    int bytes = converted * outChannels * 2;
-    audioPlayer_->pushAudio(reinterpret_cast<const char *>(swrBuffer_.data()), bytes);
-    av_frame_unref(frame);
-    av_frame_free(&frame);
+    yuv.V.resize(yuv.vLineSize * chromaH);
+    memcpy(yuv.V.data(), frame->data[2], yuv.vLineSize * chromaH);
 }
 
 void Controller::onRemoteVideoEnabled(bool enabled) {
-    if (enabled != remoteVideoEnabled_) {
-        remoteVideoEnabled_ = enabled;
-        emit remoteVideoEnabledChanged(remoteVideoEnabled_);
-        if (enabled) {
-            mediaController_->startReceiveVideo(client_->getVideoSinkPort());
-        } else {
-            mediaController_->stopReceiveVideo();
-        }
-    }
+    if (enabled == remoteVideoEnabled_) return;
+    remoteVideoEnabled_ = enabled;
+    emit remoteVideoEnabledChanged(remoteVideoEnabled_);
+    // libwebrtc 内部管理 track，无需手动 start/stop receiver
 }
 
 void Controller::onRemoteAudioEnabled(bool enabled) {
-    if (enabled != remoteAudioEnabled_) {
-        remoteAudioEnabled_ = enabled;
-        emit remoteAudioEnabledChanged(remoteAudioEnabled_);
-        if (enabled) {
-            mediaController_->startReceiveAudio(client_->getAudioSinkPort());
-        } else {
-            mediaController_->stopReceiveAudio();
-        }
-    }
+    if (enabled == remoteAudioEnabled_) return;
+    remoteAudioEnabled_ = enabled;
+    emit remoteAudioEnabledChanged(remoteAudioEnabled_);
 }
 
 void Controller::onLocalGestureResult(Detection result) {
-    int centerX = result.box.x + result.box.width / 2;
-    int centerY = result.box.y + result.box.height / 2;
+    int cx = result.box.x + result.box.width  / 2;
+    int cy = result.box.y + result.box.height / 2;
     auto label = QString::fromStdString(result.label);
-    QMetaObject::invokeMethod(client_, "sendGesture", Qt::QueuedConnection, Q_ARG(int, centerX), Q_ARG(int, centerY), Q_ARG(QString, label));
-    emit localGestureResult(centerX, centerY, label);
+    QMetaObject::invokeMethod(client_, "sendGesture", Qt::QueuedConnection,
+                              Q_ARG(int, cx), Q_ARG(int, cy),
+                              Q_ARG(QString, label));
+    emit localGestureResult(cx, cy, label);
 }
 
 void Controller::initVideoItem(QObject *mainWindow) {
-    if (!mainWindow) {
-        Loge("mainWindow is null");
-        return;
-    }
+    if (!mainWindow) { Loge("mainWindow is null"); return; }
 
     QObject *remoteVideoItem = mainWindow->findChild<QObject *>("remoteVideo");
-    if (remoteVideoItem == nullptr) {
-        Loge("remoteVideoItem is null");
-        return;
-    }
-
-    connect(this, SIGNAL(remoteVideoSizeChanged(int, int)), remoteVideoItem, SLOT(onVideoSizeChanged(int, int)),
+    if (!remoteVideoItem) { Loge("remoteVideoItem is null"); return; }
+    connect(this, SIGNAL(remoteVideoSizeChanged(int,int)),
+            remoteVideoItem, SLOT(onVideoSizeChanged(int,int)),
             Qt::UniqueConnection);
-    connect(this, SIGNAL(receiveRemoteYuvData(const YUVData &)), remoteVideoItem,
-            SLOT(onReceiveVideoData(const YUVData &)), Qt::UniqueConnection);
+    connect(this, SIGNAL(receiveRemoteYuvData(const YUVData &)),
+            remoteVideoItem, SLOT(onReceiveVideoData(const YUVData &)),
+            Qt::UniqueConnection);
 
     QObject *localVideoItem = mainWindow->findChild<QObject *>("localVideo");
-    if (localVideoItem == nullptr) {
-        Loge("localVideoItem is null");
-        return;
-    }
-
-    connect(this, SIGNAL(localVideoSizeChanged(int, int)), localVideoItem, SLOT(onVideoSizeChanged(int, int)),
+    if (!localVideoItem) { Loge("localVideoItem is null"); return; }
+    connect(this, SIGNAL(localVideoSizeChanged(int,int)),
+            localVideoItem, SLOT(onVideoSizeChanged(int,int)),
             Qt::UniqueConnection);
-    connect(this, SIGNAL(receiveLocalYuvData(const YUVData &)), localVideoItem,
-            SLOT(onReceiveVideoData(const YUVData &)), Qt::UniqueConnection);
+    connect(this, SIGNAL(receiveLocalYuvData(const YUVData &)),
+            localVideoItem, SLOT(onReceiveVideoData(const YUVData &)),
+            Qt::UniqueConnection);
 }
 
 void Controller::sendMessage(QString message) {
-    QMetaObject::invokeMethod(client_, "sendMessage", Qt::QueuedConnection, Q_ARG(QString, message));
+    QMetaObject::invokeMethod(client_, "sendMessage", Qt::QueuedConnection,
+                              Q_ARG(QString, message));
 }
 
 void Controller::startAsr() {
@@ -415,5 +341,3 @@ void Controller::stopAsr() {
         asrClient_ = nullptr;
     }
 }
-
-

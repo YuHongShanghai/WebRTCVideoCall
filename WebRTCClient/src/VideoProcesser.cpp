@@ -16,12 +16,7 @@ Detection VideoProcesser::gestureRecognition(AVFrame *frame) {
 }
 
 void VideoProcesser::segmentation(AVFrame *inFrame, AVFrame *outFrame) {
-    if (outFrame == nullptr || segInfer_ == nullptr) {
-        av_frame_ref(outFrame, inFrame);
-        return;
-    }
-
-    if (!segInfer_->infer(inFrame, outFrame)) {
+    if (segInfer_ == nullptr || !segInfer_->infer(inFrame, outFrame)) {
         av_frame_ref(outFrame, inFrame);
     }
 }

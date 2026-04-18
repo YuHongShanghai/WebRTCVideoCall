@@ -1,5 +1,4 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#pragma once
 
 #include <QObject>
 #include <QThread>
@@ -8,33 +7,33 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 
-#include "AudioPlayer.h"
+#include "AsrClient.h"
 #include "ClientWorker.h"
 #include "MediaController.h"
 #include "i420render.h"
 
-class Controller : public QObject
-{
+class Controller : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString localId READ localId CONSTANT)
-    Q_PROPERTY(bool videoEnabled READ videoEnabled WRITE setVideoEnabled NOTIFY videoEnabledChanged)
+    Q_PROPERTY(bool videoEnabled    READ videoEnabled    WRITE setVideoEnabled    NOTIFY videoEnabledChanged)
     Q_PROPERTY(bool remoteVideoEnabled READ remoteVideoEnabled NOTIFY remoteVideoEnabledChanged)
-    Q_PROPERTY(bool audioEnabled READ audioEnabled WRITE setAudioEnabled NOTIFY audioEnabledChanged)
-    Q_PROPERTY(bool gestureEnabled READ gestureEnabled WRITE setGestureEnabled NOTIFY gestureEnabledChanged)
-    Q_PROPERTY(bool bgEnabled READ bgEnabled WRITE setBgEnabled NOTIFY bgEnabledChanged)
+    Q_PROPERTY(bool audioEnabled    READ audioEnabled    WRITE setAudioEnabled    NOTIFY audioEnabledChanged)
+    Q_PROPERTY(bool gestureEnabled  READ gestureEnabled  WRITE setGestureEnabled  NOTIFY gestureEnabledChanged)
+    Q_PROPERTY(bool bgEnabled       READ bgEnabled       WRITE setBgEnabled       NOTIFY bgEnabledChanged)
 
 public:
-    Controller(QObject *parent = nullptr);
+    explicit Controller(QObject *parent = nullptr);
     ~Controller();
+
     QString localId() const;
-    bool videoEnabled() const;
+    bool videoEnabled()       const;
     void setVideoEnabled(bool enabled);
     bool remoteVideoEnabled() const;
-    bool audioEnabled() const;
+    bool audioEnabled()       const;
     void setAudioEnabled(bool enabled);
-    bool gestureEnabled() const;
+    bool gestureEnabled()     const;
     void setGestureEnabled(bool enabled);
-    bool bgEnabled() const;
+    bool bgEnabled()          const;
     void setBgEnabled(bool enabled);
 
     Q_INVOKABLE void callRemote(const QString &id);
@@ -44,31 +43,32 @@ public:
     Q_INVOKABLE void startAsr();
     Q_INVOKABLE void stopAsr();
 
+    // PcState 与 webrtc::PeerConnectionInterface::PeerConnectionState 顺序一致
     enum PcState {
-        New = RTC_NEW,
-        Connecting = RTC_CONNECTING,
-        Connected = RTC_CONNECTED,
-        Disconnected = RTC_DISCONNECTED,
-        Failed = RTC_FAILED,
-        Closed = RTC_CLOSED
+        New          = 0,
+        Connecting   = 1,
+        Connected    = 2,
+        Disconnected = 3,
+        Failed       = 4,
+        Closed       = 5
     };
-
     Q_ENUM(PcState)
 
 public slots:
     void onRemoteJoined(QString id);
     void onRemoteLeft(QString id);
     void onRemoteIds(QStringList ids);
-    void onPcStateChanged(rtc::PeerConnection::State state);
+    void onPcStateChanged(int state);
     void onRemoteCall(QString id);
     void onPcClosed(QString id);
     void onRemoteVideoFrame(AVFrame *frame);
     void onLocalVideoFrame(AVFrame *frame);
-    void extractYUVFromAVFrame(AVFrame* frame, YUVData &yuv);
-    void onRemoteAudioFrame(AVFrame *frame);
+    void onRemoteAudioData(const void *data, int bits, int rate,
+                           size_t channels, size_t frames);
     void onRemoteVideoEnabled(bool enabled);
     void onRemoteAudioEnabled(bool enabled);
     void onLocalGestureResult(Detection result);
+    void extractYUVFromAVFrame(AVFrame *frame, YUVData &yuv);
 
 signals:
     void remoteJoined(QString id);
@@ -96,33 +96,24 @@ private:
     void startMediaTransport();
     void stopMediaTransport();
     void updateSwsContext(int width, int height, int format);
-    void initSwrContext(AVFrame *frame);
 
-    ClientWorker *client_;
-    QThread *clientThread_;
+    ClientWorker    *client_;
+    QThread         *clientThread_;
     MediaController *mediaController_ = nullptr;
-    int remoteVideoWidth_ = 0;
+    int remoteVideoWidth_  = 0;
     int remoteVideoHeight_ = 0;
-    int localVideoWidth_ = 0;
-    int localVideoHeight_ = 0;
+    int localVideoWidth_   = 0;
+    int localVideoHeight_  = 0;
 
-    SwsContext* swsCtx_ = nullptr;
-    AVFrame *yuvFrame_ = nullptr;
+    SwsContext *swsCtx_   = nullptr;
+    AVFrame    *yuvFrame_ = nullptr;
 
-    AudioPlayer *audioPlayer_;
-    SwrContext *swrCtx_ = nullptr;
-    std::vector<int16_t> swrBuffer_;
-    const int MAX_OUT_SAMPLES = 4096;
-
-    bool videoEnabled_ = true;
-    bool remoteVideoEnabled_ = true;
-    bool audioEnabled_ = true;
-    bool remoteAudioEnabled_ = true;
-    bool gestureEnabled_ = false;
-    bool bgEnabled_ = false;
+    bool videoEnabled_        = true;
+    bool remoteVideoEnabled_  = true;
+    bool audioEnabled_        = true;
+    bool remoteAudioEnabled_  = true;
+    bool gestureEnabled_      = false;
+    bool bgEnabled_           = false;
 
     AsrClient *asrClient_ = nullptr;
-
-    std::unique_ptr<AudioProcesser> audioProcesser_;
 };
-#endif // MAINWINDOW_H

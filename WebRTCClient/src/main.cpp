@@ -12,6 +12,7 @@ int main(int argc, char *argv[])
     Logger::init("WebrtcClient");
     qputenv("QSG_RHI_BACKEND", "opengl");
     QGuiApplication app(argc, argv);
+
     QQmlApplicationEngine engine;
 
     Controller controller;
@@ -38,5 +39,6 @@ int main(int argc, char *argv[])
     engine.load(url);
 
     return app.exec();
-
+    // 摄像头权限请求和初始化由 Controller 在 app.exec() 启动后通过
+    // QTimer::singleShot(0) 触发（见 Controller.cpp）
 }

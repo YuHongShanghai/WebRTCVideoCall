@@ -1,95 +1,71 @@
+#pragma once
+
+// ──────────────────────────────────────────────────────────
+// WebRTCClient — 基于原生 libwebrtc 的 P2P 客户端
 //
-// Created by 余泓 on 2025/11/1.
+// 公共接口故意只使用 C-ABI 兼容类型（const char*, 函数指针, POD）。
+// 这样可以让此头文件在使用 std::__1（Apple clang）和 std::__Cr
+// （chromium clang, 用于编译 libwebrtc.a）的编译单元之间安全共享。
 //
+// 信令（WebSocket）由上层 ClientWorker (QObject) 负责；
+// 本类通过 wsSendCallback 发送，onWsMessage() 接收。
+// ──────────────────────────────────────────────────────────
 
-#ifndef WEBRTCCLIENT_H
-#define WEBRTCCLIENT_H
+extern "C" {
+#include <libavutil/frame.h>
+}
+#include <cstddef>  // size_t
 
-#include <netinet/in.h>
-#include <rtc/rtc.hpp>
-#include <string>
+// ── C-兼容回调类型 ─────────────────────────────────────────
+// 使用原始函数指针 + void* userData，避免 std::function 的 ABI 问题
+using WsSendCallback     = void (*)(const char* msg,  void* userData);
+using RoomClientsCallback= void (*)(const char* json, void* userData);
+using PcStateCallback    = void (*)(int state,         void* userData);
+using RemoteCallCb       = void (*)(const char* id,   void* userData);
+using RemoteDataCb       = void (*)(const char* data, void* userData);
+using RemoteVideoCb      = void (*)(AVFrame* frame,   void* userData);
+using RemoteAudioCb      = void (*)(const void* data, int bits, int rate,
+                                    size_t channels, size_t frames,
+                                    void* userData);
 
-#include "VideoCapturer.h"
-
-struct RtpDispatchConfig {
-    int srcSock{0};  // 从udp端口接收本地流
-    int srcPort{0};
-    int sinkSock{0};  // 将收到的远端流发送到udp端口
-    int sinkPort{0};
-    sockaddr_in sinkAddr{};
-};
+// ── 前向声明（隐藏 C++ ABI 相关的 libwebrtc 类型）──────────
+// 头文件内不包含任何 libwebrtc 头文件，避免 Qt moc 看到 sigslot.h
+class WebRTCVideoSource;
 
 class WebRTCClient {
 public:
     WebRTCClient();
     ~WebRTCClient();
-    void connectSignalServer();
-    void call(std::string id);
-    void hungup(bool first = true);
-    void sendData(const std::string &msg);
-    void setRoomClientsCallback(std::function<void(std::string)> callback);
-    void setPcStateCallback(std::function<void(rtc::PeerConnection::State)> callback);
-    void setRemoteCallCallback(std::function<void(std::string)> callback);
-    void setRemoteDataCallback(std::function<void(std::string)> callback);
-    std::string localId();
-    int videoSrcPort();
-    int videoSinkPort();
-    int audioSrcPort();
-    int audioSinkPort();
-    void sendWsMessage(const std::string &msg);
+
+    // ── 生命周期 ──────────────────────────────────────────
+    void init();
+    const char* localId() const;   // 指向内部存储，生命周期同 WebRTCClient
+
+    // ── 回调注册（必须在 init() 前调用）───────────────────
+    void setWsSendCallback    (WsSendCallback      cb, void* ud);
+    void setRoomClientsCallback(RoomClientsCallback cb, void* ud);
+    void setPcStateCallback   (PcStateCallback     cb, void* ud);
+    void setRemoteCallCallback(RemoteCallCb        cb, void* ud);
+    void setRemoteDataCallback(RemoteDataCb        cb, void* ud);
+    void setRemoteVideoCallback(RemoteVideoCb      cb, void* ud);
+    void setRemoteAudioCallback(RemoteAudioCb      cb, void* ud);
+
+    // ── 信令 ─────────────────────────────────────────────
+    void onWsMessage(const char* msg);
+    void sendWsMessage(const char* msg);
+
+    // ── 呼叫控制 ──────────────────────────────────────────
+    void call   (const char* id);
+    void hungup (bool first = true);
+    void sendData(const char* msg);
+
+    // ── 视频输入 ─────────────────────────────────────────
+    void pushVideoFrame(AVFrame* frame);
+
+    // Pimpl：隐藏所有包含 std::__Cr 类型的 libwebrtc 成员
+    // 声明为 public 供 .cpp 文件中的 file-scope observer 类引用 Impl*
+    struct Impl;
 
 private:
-    static std::string randomId(size_t length);
-    rtc::Configuration getRtcConfiguration();
-    void createPeerConnection(std::weak_ptr<rtc::WebSocket> wws, std::string id);
-    void setupDataChannel();
-    bool setupSrcRtp(int &sock, int port, int &err);
-    bool setupSinkRtp(int &sock, int port, sockaddr_in &addr, int &err);
-
-    void addMediaTrack();
-    void addVideoTrack();
-    void addAudioTrack();
-
-    void sendVideoToRemote();
-    void sendAudioToRemote();
-    void stopSendMedia();
-
-    void onMessage(std::string &msg);
-
-    std::string localId_;
-    std::shared_ptr<rtc::WebSocket> ws_;
-    std::shared_ptr<rtc::PeerConnection> pc_;
-    std::unordered_map<std::string, std::shared_ptr<rtc::PeerConnection>> peerConnectionMap_;
-
-    std::function<void(std::string)> roomClientsCallback_;
-    std::function<void(rtc::PeerConnection::State)> pcStateCallback_;
-    std::function<void(std::string)> remoteCallCallback_;
-    std::function<void(std::string)> remoteDataCallback_;
-
-    bool isCaller_ = false;
-
-    const int BUFFER_SIZE = 2*1024*1024;
-
-    // 视频
-    std::shared_ptr<rtc::Track> videoTrack_;
-    RtpDispatchConfig videoRtpConfig_;
-    rtc::SSRC videoSsrc_ = 42;
-    std::thread *sendVideoThread_ = nullptr;
-    std::atomic<bool> stopSendMedia_ = false;
-
-    // 音频
-    std::shared_ptr<rtc::Track> audioTrack_;
-    RtpDispatchConfig audioRtpConfig_;
-    rtc::SSRC audioSsrc_ = 52;
-    std::thread *sendAudioThread_ = nullptr;
-
-    // datachannel
-    std::shared_ptr<rtc::DataChannel> dc_;
-
-    uint16_t videoRtpSeq_ = 0;
-    uint16_t audioRtpSeq_ = 0;
+    Impl* d_;
 };
-
-
-
-#endif //WEBRTCCLIENT_H

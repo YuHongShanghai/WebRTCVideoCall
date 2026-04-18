@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleName</key>
+    <string>@MACOSX_BUNDLE_BUNDLE_NAME@</string>
+    <key>CFBundleIdentifier</key>
+    <string>@MACOSX_BUNDLE_GUI_IDENTIFIER@</string>
+    <key>CFBundleExecutable</key>
+    <string>@MACOSX_BUNDLE_EXECUTABLE_NAME@</string>
+    <key>CFBundleVersion</key>
+    <string>@MACOSX_BUNDLE_BUNDLE_VERSION@</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@MACOSX_BUNDLE_SHORT_VERSION_STRING@</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleAllowMixedLocalizations</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+
+    <!-- 摄像头权限（libwebrtc VideoCaptureModule 使用 AVFoundation） -->
+    <key>NSCameraUsageDescription</key>
+    <string>WebRTCVideoCall 需要访问摄像头进行视频通话。</string>
+
+    <!-- 麦克风权限（libwebrtc AudioDeviceModule 使用 CoreAudio） -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>WebRTCVideoCall 需要访问麦克风进行语音通话。</string>
+</dict>
+</plist>

@@ -1,5 +1,10 @@
 // libwebrtc headers — must come before any Qt / system C++ headers
 // (Qt redefines `emit`, which conflicts with sigslot.h's emit() method)
+// Include modules/* first so the types used in scoped_refptr<> destructors
+// (AudioProcessing, AudioDeviceModule) are complete when the factory header
+// expands them via template instantiation below.
+#include "modules/audio_device/include/audio_device.h"
+#include "modules/audio_processing/include/audio_processing.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
 #include "api/audio_options.h"
@@ -100,7 +105,8 @@ struct WebRTCClient::Impl
     // ── 状态 ─────────────────────────────────────────────
     std::string localId_;
     std::string remoteId_;
-    bool        isCaller_ = false;
+    bool        isCaller_          = false;
+    bool        localAudioEnabled_ = true;  // 发送方本地音频 track.enabled()
 
     // ── C 回调（不跨越 ABI 边界）─────────────────────────
     WsSendCallback      wsSendCb_     = nullptr;  void* wsSendUd_      = nullptr;
@@ -465,6 +471,8 @@ void WebRTCClient::Impl::addMediaTracks() {
     cricket::AudioOptions audioOpts;
     auto aSource = pcFactory_->CreateAudioSource(audioOpts);
     auto aTrack  = pcFactory_->CreateAudioTrack("audio0", aSource.get());
+    // 把当前静音状态应用到新建的 track，保证“呼叫时即静音”语义
+    aTrack->set_enabled(localAudioEnabled_);
     if (auto r = pc_->AddTrack(aTrack, {"stream0"}); !r.ok())
         Loge("AddAudioTrack failed: {}", r.error().message());
 }
@@ -535,4 +543,16 @@ void WebRTCClient::hungup      (bool first)        { d_->hungup(first);    }
 void WebRTCClient::sendData    (const char* msg)   { d_->sendData(msg);    }
 void WebRTCClient::pushVideoFrame(AVFrame* frame)  {
     if (d_->videoSource_) d_->videoSource_->pushFrame(frame);
+}
+
+void WebRTCClient::setLocalAudioEnabled(bool enabled) {
+    d_->localAudioEnabled_ = enabled;
+    if (!d_->pc_) return;  // 尚未建连：状态已记录，addMediaTracks() 会应用
+    for (auto& sender : d_->pc_->GetSenders()) {
+        auto track = sender->track();
+        if (!track) continue;
+        if (track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
+            track->set_enabled(enabled);
+        }
+    }
 }

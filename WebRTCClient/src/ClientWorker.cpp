@@ -181,6 +181,10 @@ void ClientWorker::notifyAudioEnabled(bool enable) {
     client_->sendWsMessage(jObjToStr(j).toUtf8().constData());
 }
 
+void ClientWorker::setLocalAudioEnabled(bool enable) {
+    if (client_) client_->setLocalAudioEnabled(enable);
+}
+
 QString ClientWorker::getLocalId() {
     if (!client_) return {};
     return QString::fromUtf8(client_->localId());

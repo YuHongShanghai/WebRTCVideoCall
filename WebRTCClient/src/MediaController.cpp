@@ -12,15 +12,6 @@ void MediaController::localFrameTrampoline(AVFrame* frame, void* ctx) {
     static_cast<MediaController*>(ctx)->recvLocalVideoFrame(frame);
 }
 
-void MediaController::webrtcFrameTrampoline(AVFrame* frame, void* ctx) {
-    auto* self = static_cast<MediaController*>(ctx);
-    if (self->webrtcSink_) {
-        self->webrtcSink_(frame);   // webrtcSink_ 负责释放帧
-    } else {
-        av_frame_free(&frame);
-    }
-}
-
 // ── MediaController ───────────────────────────────────────
 
 MediaController::MediaController(QObject *parent) : QObject(parent) {
@@ -33,10 +24,11 @@ MediaController::~MediaController() {
 }
 
 void MediaController::startCaptureVideo(std::function<void(AVFrame *)> webrtcSink) {
-    // 更新 WebRTC 回调（即使已在运行也可安全调用）
+    // 更新 WebRTC 回调（即使已在运行也可安全调用）。
+    // WebRTC 的投递在 recvLocalVideoFrame 中完成（分割后），因此不再使用
+    // VideoCapturer 的 webrtcCallback_ 直通路径。
     if (webrtcSink) {
         webrtcSink_ = std::move(webrtcSink);
-        videoCapturer_->setWebRTCCallback(webrtcFrameTrampoline, this);
     }
 
     // 已在运行则无需重新 init/start
@@ -66,7 +58,7 @@ void MediaController::setBgEnabled(bool enabled) {
 }
 
 void MediaController::recvLocalVideoFrame(AVFrame *frame) {
-    // 手势识别（不修改帧内容）
+    // 手势识别（不修改帧内容，使用原始帧）
     Detection det = videoProcesser_->gestureRecognition(frame);
     if (!det.label.empty()) {
         emit localGestureResult(det);
@@ -76,6 +68,14 @@ void MediaController::recvLocalVideoFrame(AVFrame *frame) {
     AVFrame* outFrame = av_frame_alloc();
     videoProcesser_->segmentation(frame, outFrame);
     av_frame_free(&frame);
+
+    // 把分割后的帧也推给 WebRTC 编码端，保证远端看到的是替换背景后的画面。
+    // webrtcSink_ 接管帧所有权；本地预览通过 onLocalVideoFrame 使用 outFrame。
+    if (webrtcSink_) {
+        AVFrame* forWebrtc = av_frame_alloc();
+        av_frame_ref(forWebrtc, outFrame);
+        webrtcSink_(forWebrtc);
+    }
 
     emit onLocalVideoFrame(outFrame);
 }

@@ -113,7 +113,9 @@ void Controller::setAudioEnabled(bool enabled) {
     if (enabled == audioEnabled_) return;
     audioEnabled_ = enabled;
     emit audioEnabledChanged(audioEnabled_);
-    // libwebrtc ADM 控制麦克风，此处仅通知对端
+    // 本地 track.enabled() 控制实际静音（libwebrtc 会发送静音包），
+    // 同时通知对端以便其 UI 显示静音状态。
+    client_->setLocalAudioEnabled(enabled);
     client_->notifyAudioEnabled(enabled);
 }
 

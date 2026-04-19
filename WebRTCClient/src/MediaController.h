@@ -42,7 +42,6 @@ private:
 
     // C 蹦床函数（作为 VideoCapturer 回调，ctx = this）
     static void localFrameTrampoline(AVFrame* frame, void* ctx);
-    static void webrtcFrameTrampoline(AVFrame* frame, void* ctx);
 
     std::unique_ptr<VideoCapturer>  videoCapturer_;
     std::unique_ptr<VideoProcesser> videoProcesser_;

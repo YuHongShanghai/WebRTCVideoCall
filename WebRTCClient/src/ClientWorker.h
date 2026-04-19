@@ -30,6 +30,9 @@ public:
     void notifyVideoEnabled(bool enable);
     void notifyAudioEnabled(bool enable);
 
+    // 控制本地音频 track.enabled()（静音 / 取消静音）
+    void setLocalAudioEnabled(bool enable);
+
     // WebSocket 实例：供 setWsSendCallback lambda 捕获
     QWebSocket *ws_ = nullptr;
 

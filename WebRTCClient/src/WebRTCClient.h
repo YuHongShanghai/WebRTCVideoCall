@@ -62,6 +62,12 @@ public:
     // ── 视频输入 ─────────────────────────────────────────
     void pushVideoFrame(AVFrame* frame);
 
+    // ── 音频控制 ─────────────────────────────────────────
+    // 控制本地发送的音频 track.enabled()。禁用后 libwebrtc 会持续发送静音包，
+    // 对端播放得到静音，而不是被动丢包/重连。
+    // 可在 pc_ 创建前调用，状态会在 addMediaTracks() 时应用到新 track。
+    void setLocalAudioEnabled(bool enabled);
+
     // Pimpl：隐藏所有包含 std::__Cr 类型的 libwebrtc 成员
     // 声明为 public 供 .cpp 文件中的 file-scope observer 类引用 Impl*
     struct Impl;

@@ -186,6 +186,12 @@ void VideoCapturer::captureLoop() {
 
         if (avcodec_send_packet(decCtx_, pkt) == 0) {
             while (avcodec_receive_frame(decCtx_, decFrame) == 0) {
+                // 无任何消费者时，跳过分配与色彩转换，避免无谓开销
+                if (!frameCallback_ && !webrtcCallback_) {
+                    av_frame_unref(decFrame);
+                    continue;
+                }
+
                 AVFrame* yuv = allocYuv420(width_, height_);
                 if (!yuv) {
                     av_frame_unref(decFrame);

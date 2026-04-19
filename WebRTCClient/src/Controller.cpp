@@ -92,8 +92,15 @@ void Controller::setVideoEnabled(bool enabled) {
     if (enabled) {
         mediaController_->startCaptureVideo(
             [this](AVFrame *frame) {
+                // 用 AVFramePtr 捕获：若 clientThread_ 停止导致 lambda 被丢弃，
+                // unique_ptr 析构会释放帧；正常执行时 release() 把所有权
+                // 转回 pushVideoFrame → WebRTCVideoSource::pushFrame 负责释放。
+                AVFramePtr owned(frame);
                 QMetaObject::invokeMethod(
-                    client_, [this, frame]() { client_->pushVideoFrame(frame); },
+                    client_,
+                    [this, owned = std::move(owned)]() mutable {
+                        client_->pushVideoFrame(owned.release());
+                    },
                     Qt::QueuedConnection);
             });
     } else {

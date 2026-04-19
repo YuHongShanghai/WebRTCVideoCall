@@ -13,6 +13,10 @@
 #include "Logger.h"
 #include "config.h"
 
+extern "C" {
+#include <libavutil/frame.h>
+}
+
 // ClientInfo calls that WebRTCClient.cpp cannot make (ABI mismatch) are done here.
 static void syncClientInfo(WebRTCClient* client) {
     if (!client) return;
@@ -141,7 +145,10 @@ void ClientWorker::call(QString id) {
 void ClientWorker::hungup() { client_->hungup(); }
 
 void ClientWorker::pushVideoFrame(AVFrame *frame) {
+    // 接管帧所有权：WebRTCVideoSource::pushFrame 已同步完成 I420Buffer::Copy，
+    // 不再持有原 AVFrame，此处统一释放，避免整条链路的内存泄漏。
     if (client_) client_->pushVideoFrame(frame);
+    av_frame_free(&frame);
 }
 
 void ClientWorker::sendMessage(QString message) {

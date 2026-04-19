@@ -38,8 +38,11 @@ private:
     // 预处理：RGB(HWC, uint8) -> CHW(float)
     void preprocessToCHW(const cv::Mat& rgb);
 
-    // 后处理：从 ORT 输出生成 mask（0/1），并在 rgb 上做叠加
+    // 后处理：从 ORT 输出生成 mask（更新 maskProbFull_ 缓存）
     void postprocessAndBlend(cv::Mat& rgb, const Ort::Value& outTensor, int srcW, int srcH);
+
+    // 用已有的 maskProbFull_ 在 rgb 上就地合成背景（零 ORT 调用）
+    void blendWithMask(cv::Mat& rgb, int srcW, int srcH);
 
     void ensureBgFull(int srcW, int srcH);
 
@@ -79,6 +82,13 @@ private:
     std::vector<float> maskProbBuf_;        // inputHeight*inputWidth (prob/person score) for resizing
     cv::Mat maskProbSmall_;                 // inputHeight x inputWidth, CV_32F (wrap)
     cv::Mat maskProbFull_;                  // srcH x srcW, CV_32F
+    cv::Mat bgBlendMask_;                   // srcH x srcW, CV_8U（0/255，合成时复用）
+
+    // 推理分帧：每 inferStride_ 帧跑一次 ORT，其余帧复用上一帧的 maskProbFull_。
+    // 分割掩码随时间变化缓慢，肉眼几乎看不出差别，但 CPU 下降近线性。
+    int  inferStride_{2};
+    int  frameCounter_{0};
+    bool hasCachedMask_{false};
 
     // Background
     std::mutex bgMutex_;

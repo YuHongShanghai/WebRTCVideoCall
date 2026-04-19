@@ -71,6 +71,12 @@ Detection GestureInfer::infer(AVFrame *frame) {
         return {};
     }
 
+    // 分帧跳过：大部分帧直接返回空 Detection，不跑 sws/预处理/YOLO。
+    // 单检测用的 last-detection 不做缓存——手势变化快，重复 emit 反而会刷屏。
+    if ((frameCounter_++ % inferStride_) != 0) {
+        return {};
+    }
+
     /*
      * 1. AVFrame (YUV/NV12/...) -> RGB24
      */
@@ -82,41 +88,60 @@ Detection GestureInfer::infer(AVFrame *frame) {
         return {};
     }
 
-    std::vector<uint8_t> rgb_buffer(frame->width * frame->height * 3);
+    const int srcW = frame->width;
+    const int srcH = frame->height;
+    const size_t rgbSize = static_cast<size_t>(srcW) * srcH * 3;
+    if (rgbBuf_.size() != rgbSize) {
+        rgbBuf_.assign(rgbSize, 0);
+        cachedSrcW_ = srcW;
+        cachedSrcH_ = srcH;
+    }
 
-    uint8_t *dst_data[4] = {rgb_buffer.data(), nullptr, nullptr, nullptr};
-    int dst_linesize[4] = {frame->width * 3, 0, 0, 0};
+    uint8_t *dst_data[4] = {rgbBuf_.data(), nullptr, nullptr, nullptr};
+    int dst_linesize[4] = {srcW * 3, 0, 0, 0};
 
-    sws_scale(swsCtx_, frame->data, frame->linesize, 0, frame->height, dst_data, dst_linesize);
-    
+    sws_scale(swsCtx_, frame->data, frame->linesize, 0, srcH, dst_data, dst_linesize);
+
     /*
      * 2. RGB -> cv::Mat
      */
-    cv::Mat rgb(frame->height, frame->width, CV_8UC3, rgb_buffer.data());
+    cv::Mat rgb(srcH, srcW, CV_8UC3, rgbBuf_.data());
 
     /*
-     * 3. 预处理：resize + float32 + 1/255
-     *    注意：这里仍是 direct resize（非 letterbox）
+     * 3. 预处理：resize → 同时做 HWC→CHW + 1/255 归一化（一次遍历完成）
+     *    省掉 convertTo + split 两次全尺寸额外 pass。
      */
-    cv::Mat resized;
-    cv::resize(rgb, resized, cv::Size(inputWidth_, inputHeight_));
-    resized.convertTo(resized, CV_32F, 1.0 / 255.0);
+    cv::Mat resized(inputHeight_, inputWidth_, CV_8UC3);
+    cv::resize(rgb, resized, cv::Size(inputWidth_, inputHeight_), 0, 0, cv::INTER_LINEAR);
 
-    /*
-     * 4. HWC -> NCHW
-     */
-    std::vector<float> input_tensor(3 * inputWidth_ * inputHeight_);
-
-    std::vector<cv::Mat> chw(3);
-    for (int i = 0; i < 3; ++i) {
-        chw[i] = cv::Mat(inputHeight_, inputWidth_, CV_32F, input_tensor.data() + i * inputWidth_ * inputHeight_);
+    const size_t tensorSize = static_cast<size_t>(3) * inputWidth_ * inputHeight_;
+    if (inputTensor_.size() != tensorSize) {
+        inputTensor_.assign(tensorSize, 0.f);
     }
-    cv::split(resized, chw);
+
+    {
+        const int H = inputHeight_;
+        const int W = inputWidth_;
+        float* outC0 = inputTensor_.data() + 0 * H * W;
+        float* outC1 = inputTensor_.data() + 1 * H * W;
+        float* outC2 = inputTensor_.data() + 2 * H * W;
+        const float inv255 = 1.0f / 255.0f;
+#pragma omp parallel for
+        for (int i = 0; i < H; ++i) {
+            const uint8_t* p = resized.ptr<uint8_t>(i);
+            const int rowOff = i * W;
+            for (int j = 0; j < W; ++j) {
+                outC0[rowOff + j] = p[j * 3 + 0] * inv255;
+                outC1[rowOff + j] = p[j * 3 + 1] * inv255;
+                outC2[rowOff + j] = p[j * 3 + 2] * inv255;
+            }
+        }
+    }
 
     std::vector<int64_t> input_shape = {1, 3, inputHeight_, inputWidth_};
 
     Ort::Value input_tensor_ort = Ort::Value::CreateTensor<float>(
-            memoryInfo_, input_tensor.data(), input_tensor.size(), input_shape.data(), input_shape.size());
+            memoryInfo_, inputTensor_.data(), inputTensor_.size(), input_shape.data(), input_shape.size());
 
     const char *input_names[] = {inputNames_[0].c_str()};
     const char *output_names[] = {outputNames_[0].c_str()};

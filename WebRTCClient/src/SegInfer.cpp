@@ -147,6 +147,10 @@ void SegInfer::ensureBuffers(int srcW, int srcH) {
 
     if (maskProbFull_.empty() || maskProbFull_.rows != srcH || maskProbFull_.cols != srcW) {
         maskProbFull_.create(srcH, srcW, CV_32F);
+        hasCachedMask_ = false;  // 尺寸变化：旧缓存失效
+    }
+    if (bgBlendMask_.empty() || bgBlendMask_.rows != srcH || bgBlendMask_.cols != srcW) {
+        bgBlendMask_.create(srcH, srcW, CV_8U);
     }
 }
 
@@ -275,35 +279,25 @@ void SegInfer::postprocessAndBlend(cv::Mat& rgb, const Ort::Value& outTensor, in
         }
     }
 
-    // resize 到原图
+    // resize 到原图（仅在本帧跑了 ORT 时才需要；缓存命中时 maskProbFull_ 复用）
     cv::resize(probSmall, maskProbFull_, cv::Size(srcW, srcH), 0, 0, cv::INTER_LINEAR);
+    hasCachedMask_ = true;
+}
 
-    // 如果启用背景图：做换背景合成；否则保持 rgb 不变（你也可以在这里继续做其他叠加）
+void SegInfer::blendWithMask(cv::Mat& rgb, int srcW, int srcH) {
     bool doBg = false;
     {
         std::lock_guard<std::mutex> lk(bgMutex_);
         doBg = bgEnabled_ && !bgRgbOrig_.empty();
     }
-
-    if (!doBg) {
-        return;
-    }
+    if (!doBg) return;
 
     ensureBgFull(srcW, srcH);
 
-    // 合成：mask > threshold => 前景；否则 => 背景
-    // rgb 与 bgRgbFull_ 均为 RGB8
-    for (int y = 0; y < srcH; ++y) {
-        const float* mp = maskProbFull_.ptr<float>(y);
-        cv::Vec3b* fg = rgb.ptr<cv::Vec3b>(y);
-        const cv::Vec3b* bg = bgRgbFull_.ptr<cv::Vec3b>(y);
-
-        for (int x = 0; x < srcW; ++x) {
-            if (mp[x] <= confThreshold_) {
-                fg[x] = bg[x];
-            }
-        }
-    }
+    // 用 OpenCV SIMD：mask <= threshold => 背景区域，copyTo 仅写这些像素。
+    // 相比逐像素循环，HD/FHD 上可降一倍以上合成耗时。
+    cv::compare(maskProbFull_, confThreshold_, bgBlendMask_, cv::CMP_LE);
+    bgRgbFull_.copyTo(rgb, bgBlendMask_);
 }
 
 bool SegInfer::infer(const AVFrame* inframe, AVFrame* outframe) {
@@ -349,42 +343,51 @@ bool SegInfer::infer(const AVFrame* inframe, AVFrame* outframe) {
         dstLinesize
     );
 
-    // rgbMat_ 是 RGB 顺序（由 sws 输出 RGB24）
-    // 预处理生成 CHW
-    preprocessToCHW(rgbMat_);
+    // 分帧跑推理：首帧或每 inferStride_ 帧跑一次完整的预处理+ORT，
+    // 其余帧直接复用上一帧缓存的 maskProbFull_ 做合成。
+    // 采集帧率 30fps 下即便 stride=2 也有 15Hz 的掩码更新，肉眼无差。
+    const bool runOrt = !hasCachedMask_ || (frameCounter_ % inferStride_ == 0);
+    ++frameCounter_;
 
-    // ORT input tensor
-    Ort::Value inputTensorOrt = Ort::Value::CreateTensor<float>(
-        memoryInfo_,
-        inputTensor_.data(),
-        inputTensor_.size(),
-        inputShape_.data(),
-        inputShape_.size()
-    );
+    if (runOrt) {
+        // 预处理生成 CHW
+        preprocessToCHW(rgbMat_);
 
-    // Run
-    std::vector<Ort::Value> outputs;
-    try {
-        outputs = session_.Run(
-            Ort::RunOptions{nullptr},
-            inputNames_.data(),
-            &inputTensorOrt,
-            1,
-            outputNames_.data(),
-            outputNames_.size()
+        // ORT input tensor
+        Ort::Value inputTensorOrt = Ort::Value::CreateTensor<float>(
+            memoryInfo_,
+            inputTensor_.data(),
+            inputTensor_.size(),
+            inputShape_.data(),
+            inputShape_.size()
         );
-    } catch (const Ort::Exception& e) {
-        Loge("ORT Run failed: {}", e.what());
-        return false;
+
+        std::vector<Ort::Value> outputs;
+        try {
+            outputs = session_.Run(
+                Ort::RunOptions{nullptr},
+                inputNames_.data(),
+                &inputTensorOrt,
+                1,
+                outputNames_.data(),
+                outputNames_.size()
+            );
+        } catch (const Ort::Exception& e) {
+            Loge("ORT Run failed: {}", e.what());
+            return false;
+        }
+
+        if (outputs.empty()) {
+            Loge("ORT output empty");
+            return false;
+        }
+
+        // 更新 maskProbFull_ 缓存
+        postprocessAndBlend(rgbMat_, outputs[0], srcW, srcH);
     }
 
-    if (outputs.empty()) {
-        Loge("ORT output empty");
-        return false;
-    }
-
-    // 后处理并叠加到 rgbMat_ 上（就地修改 rgbBuf_）
-    postprocessAndBlend(rgbMat_, outputs[0], srcW, srcH);
+    // 用（新算出或缓存的）mask 做 SIMD 合成
+    blendWithMask(rgbMat_, srcW, srcH);
 
     // RGB24 -> outframe format（通常希望与输入一致）
     const AVPixelFormat outFmt = static_cast<AVPixelFormat>(outframe->format);

@@ -469,6 +469,10 @@ void WebRTCClient::Impl::addMediaTracks() {
         Loge("AddVideoTrack failed: {}", r.error().message());
 
     cricket::AudioOptions audioOpts;
+    audioOpts.echo_cancellation = true;
+    audioOpts.auto_gain_control = true;
+    audioOpts.noise_suppression = true;
+    audioOpts.highpass_filter   = true;
     auto aSource = pcFactory_->CreateAudioSource(audioOpts);
     auto aTrack  = pcFactory_->CreateAudioTrack("audio0", aSource.get());
     // 把当前静音状态应用到新建的 track，保证“呼叫时即静音”语义

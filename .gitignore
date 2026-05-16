@@ -3,3 +3,5 @@
 .DS_Store
 .idea
 ./cmake-build-libwebrtc
+.claude
+WebRTCClient/third-party/libwebrtc/prebuilt

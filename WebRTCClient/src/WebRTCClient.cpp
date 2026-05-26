@@ -107,6 +107,7 @@ struct WebRTCClient::Impl
     std::string remoteId_;
     bool        isCaller_          = false;
     bool        localAudioEnabled_ = true;  // 发送方本地音频 track.enabled()
+    std::string iceServersJson_;
 
     // ── C 回调（不跨越 ABI 边界）─────────────────────────
     WsSendCallback      wsSendCb_     = nullptr;  void* wsSendUd_      = nullptr;
@@ -148,6 +149,7 @@ struct WebRTCClient::Impl
     void hungup(bool first);
     void sendData(const std::string& msg);
     void sendWsMessage(const std::string& msg);
+    void addConfiguredIceServers(webrtc::PeerConnectionInterface::RTCConfiguration& config);
 
     // 发出信令消息的便捷函数
     void sendViaWs(const std::string& msg) {
@@ -303,6 +305,12 @@ void WebRTCClient::Impl::onWsMessage(const std::string& raw) {
     if (!json::accept(raw)) { Loge("onWsMessage: JSON parse error"); return; }
     msg = json::parse(raw);
 
+    if (msg.contains("ice_servers")) {
+        iceServersJson_ = msg["ice_servers"].dump();
+        Logi("Received {} ICE server entries from signaling server", msg["ice_servers"].size());
+        return;
+    }
+
     if (!msg.contains("id")) {
         if (roomCb_) roomCb_(raw.c_str(), roomUd_);
         return;
@@ -452,14 +460,46 @@ void WebRTCClient::Impl::createPeerConnection(const std::string& remoteId) {
     remoteId_ = remoteId;
     webrtc::PeerConnectionInterface::RTCConfiguration config;
     config.sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
-    webrtc::PeerConnectionInterface::IceServer stun;
-    stun.uri = STUN_SERVER;
-    config.servers.push_back(std::move(stun));
+    addConfiguredIceServers(config);
     webrtc::PeerConnectionDependencies deps(this);
     auto result = pcFactory_->CreatePeerConnectionOrError(config, std::move(deps));
     if (!result.ok()) { Loge("CreatePeerConnection failed: {}", result.error().message()); return; }
     pc_ = result.MoveValue();
     Logi("PeerConnection created for {}", remoteId);
+}
+
+void WebRTCClient::Impl::addConfiguredIceServers(
+    webrtc::PeerConnectionInterface::RTCConfiguration& config) {
+    if (!iceServersJson_.empty() && json::accept(iceServersJson_)) {
+        const auto servers = json::parse(iceServersJson_);
+        for (const auto& item : servers) {
+            if (!item.is_object() || !item.contains("urls")) continue;
+
+            webrtc::PeerConnectionInterface::IceServer server;
+            const auto& urls = item["urls"];
+            if (urls.is_string()) {
+                server.urls.push_back(urls.get<std::string>());
+            } else if (urls.is_array()) {
+                for (const auto& url : urls) {
+                    if (url.is_string()) server.urls.push_back(url.get<std::string>());
+                }
+            }
+
+            server.username = item.value("username", std::string{});
+            server.password = item.value("credential", std::string{});
+            if (!server.urls.empty()) {
+                server.uri = server.urls.front();
+                config.servers.push_back(std::move(server));
+            }
+        }
+    }
+
+    if (config.servers.empty()) {
+        webrtc::PeerConnectionInterface::IceServer stun;
+        stun.uri = STUN_SERVER;
+        stun.urls.push_back(STUN_SERVER);
+        config.servers.push_back(std::move(stun));
+    }
 }
 
 void WebRTCClient::Impl::addMediaTracks() {

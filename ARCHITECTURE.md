@@ -325,6 +325,8 @@ QCoreApplication
        └─ QWebSocketServer (NonSecureMode, :8000)
             └─ clients: QMap<QString, QWebSocket*>
                         key = clientId（URL 路径第一段）
+       └─ IceServerConfig
+            └─ 从环境变量生成 STUN/TURN ice_servers
 ```
 
 ### 连接协议
@@ -333,10 +335,21 @@ QCoreApplication
 
 服务器无持久化状态，所有逻辑在内存 `QMap` 中维护。
 
+客户端连接成功后，服务器会先下发 ICE 配置：
+
+```json
+{"ice_servers":[{"urls":"stun:stun.l.google.com:19302"}]}
+```
+
+如果配置了 `WEBRTC_TURN_HOST` 和 `WEBRTC_TURN_SECRET`，服务器会基于 coturn
+`static-auth-secret` 生成短期 TURN 凭证，并额外下发 `turn:` / `turns:` 地址。
+客户端创建 PeerConnection 时使用标准 ICE 策略，由 libwebrtc 自动选择 P2P 或 TURN relay。
+
 ### 信令消息路由
 
 | 消息字段 | 处理逻辑 |
 |----------|----------|
+| `{"ice_servers": [...]}` | 客户端连接后由服务器下发，用于创建 PeerConnection |
 | `{"remote_joined": id}` | 广播给所有已连接客户端 |
 | `{"remote_ids": [...]}` | 仅发给新连接客户端（通知房间内已有成员） |
 | `{"remote_left": id}` | 客户端断开时广播 |

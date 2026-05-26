@@ -5,3 +5,5 @@
 ./cmake-build-libwebrtc
 .claude
 WebRTCClient/third-party/libwebrtc/prebuilt
+deploy/coturn/.env.local
+deploy/coturn/turnserver.local.conf

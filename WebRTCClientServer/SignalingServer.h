@@ -17,6 +17,8 @@
 #include <QObject>
 #include <QString>
 
+#include "IceServerConfig.h"
+
 class QWebSocketServer;
 class QWebSocket;
 class SignalingServer : public QObject {
@@ -34,6 +36,7 @@ private slots:
 private:
 	QWebSocketServer *server;
 	QMap<QString, QWebSocket *> clients;
+	IceServerConfig iceServerConfig;
 };
 
 #endif // SIGNALINGSERVER_H

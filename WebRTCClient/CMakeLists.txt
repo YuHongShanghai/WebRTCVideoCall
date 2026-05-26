@@ -73,7 +73,10 @@ set(LIBWEBRTC_PREBUILT_DIR ${LIBWEBRTC_DIR}/prebuilt)
 set(WEBRTC_CLIENT_PREBUILT_O  "${LIBWEBRTC_PREBUILT_DIR}/WebRTCClient.cpp.o")
 set(WEBRTC_VIDSRC_PREBUILT_O  "${LIBWEBRTC_PREBUILT_DIR}/WebRTCVideoSource.cpp.o")
 
-if(EXISTS "${WEBRTC_CLIENT_PREBUILT_O}"
+option(WEBRTC_USE_PREBUILT_BRIDGE "Use prebuilt libwebrtc bridge object files" OFF)
+
+if(WEBRTC_USE_PREBUILT_BRIDGE
+   AND EXISTS "${WEBRTC_CLIENT_PREBUILT_O}"
    AND EXISTS "${WEBRTC_VIDSRC_PREBUILT_O}")
 
     message(STATUS "Using prebuilt WebRTC bridge objects from ${LIBWEBRTC_PREBUILT_DIR}")
@@ -82,7 +85,7 @@ if(EXISTS "${WEBRTC_CLIENT_PREBUILT_O}"
     add_custom_target(webrtc_bridge_objs)
 
 else()
-    message(STATUS "Prebuilt bridge objects not found, compiling with chromium clang")
+    message(STATUS "Compiling WebRTC bridge objects with chromium clang")
 
     set(CHROMIUM_CLANG "${LIBWEBRTC_DIR}/bin/clang++")
     set(SDK "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk")

@@ -28,6 +28,10 @@ void SignalingServer::onNewConnection() {
 	qInfo() << QString::fromStdString(
 	    std::format("Client {} connected", client_id.toUtf8().constData()));
 
+    QJsonObject iceConfig;
+    iceConfig["ice_servers"] = iceServerConfig.toJson(client_id);
+    webSocket->sendTextMessage(QJsonDocument(iceConfig).toJson(QJsonDocument::Compact));
+
     for (auto ws: clients.values()) {
         QJsonObject obj;
         obj["remote_joined"] = client_id;

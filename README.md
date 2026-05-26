@@ -75,9 +75,12 @@ cmake --build cmake-build-debug --target appWebRTCClient -j8
 编辑 `WebRTCClient/src/config.h`：
 
 ```cpp
-#define STUN_SERVER "stun:stun.l.google.com:19302"  // STUN 服务器
-#define WS_SERVER   "ws://127.0.0.1:8000"            // 信令服务器地址
+#define STUN_SERVER "stun:stun.l.google.com:19302"  // 信令未下发 ICE 配置时的兜底 STUN
+#define WS_SERVER   "ws://124.222.143.151:8000"      // 信令服务器地址
 ```
+
+客户端连接信令服务器后，会优先使用服务器下发的 `ice_servers` 配置。ICE 会自动选择
+可用链路：同网或 NAT 可直连时走 P2P，直连失败时回退到 TURN relay。
 
 ---
 
@@ -86,7 +89,10 @@ cmake --build cmake-build-debug --target appWebRTCClient -j8
 ### 功能
 
 基于 Qt WebSocket 实现的轻量级 WebRTC 信令服务器，负责在两端之间转发 SDP Offer/Answer
-和 ICE Candidate，完成 P2P 连接协商。默认监听 `127.0.0.1:8000`。
+和 ICE Candidate，完成 P2P 连接协商。默认监听 `0.0.0.0:8000`。
+
+信令服务器会在客户端连接后下发 `ice_servers`。生产或跨公网部署时，建议配合
+`deploy/coturn` 中的 coturn 服务，为 WebRTC 提供 STUN/TURN 中继能力。
 
 ### 依赖
 
@@ -101,7 +107,156 @@ cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug
 cmake --build cmake-build-debug --target WebRTCClientServer -j8
 
 ./cmake-build-debug/WebRTCClientServer/WebRTCClientServer
-# 输出：Listening on 127.0.0.1:8000
+# 输出：Listening on 0.0.0.0:8000
+```
+
+### coturn 中继服务
+
+#### 云服务器部署：124.222.143.151
+
+客户端当前默认连接云服务器信令地址：
+
+```cpp
+#define WS_SERVER "ws://124.222.143.151:8000"
+```
+
+在云服务器安全组和系统防火墙放行：
+
+```text
+8000/tcp
+3478/udp
+3478/tcp
+49152-49200/udp
+```
+
+云服务器安装依赖。Ubuntu 示例：
+
+```bash
+sudo apt update
+sudo apt install -y git cmake ninja-build build-essential docker.io docker-compose qt6-base-dev qt6-websockets-dev
+sudo systemctl enable --now docker
+```
+
+把项目上传到云服务器后，在云服务器执行：
+
+```bash
+cd WebRTCVideoCall
+
+chmod +x scripts/*.sh
+./scripts/setup-turn-cloud.sh 124.222.143.151
+
+cmake -S WebRTCClientServer -B cmake-build-server -G Ninja -DCMAKE_BUILD_TYPE=Release
+BUILD_DIR="$PWD/cmake-build-server" ./scripts/start-webrtc-server.sh
+```
+
+启动成功后应看到：
+
+```text
+Starting signaling server with TURN host: 124.222.143.151
+Listening on 0.0.0.0:8000
+```
+
+本地验证云服务器信令是否下发 TURN：
+
+```bash
+python3 - <<'PY'
+import asyncio, json, websockets
+
+async def main():
+    async with websockets.connect("ws://124.222.143.151:8000/test") as ws:
+        print(json.dumps(json.loads(await ws.recv()), indent=2))
+
+asyncio.run(main())
+PY
+```
+
+如果修改了 `WebRTCClient/src/config.h`，客户端需要重新构建：
+
+```bash
+cmake --build cmake-build-debug --target appWebRTCClient -j8
+```
+
+#### 本地测试
+
+没有公网域名时，可以先用本机局域网 IP 或服务器公网 IP 作为 TURN host。脚本会自动生成
+coturn 配置和信令服务器环境变量：
+
+```bash
+# 自动探测本机 IP
+./scripts/setup-turn-local.sh
+
+# 或显式指定 IP，例如局域网测试
+./scripts/setup-turn-local.sh 192.168.1.20
+```
+
+启动 coturn 和信令服务器：
+
+```bash
+./scripts/start-webrtc-server.sh
+```
+
+脚本会生成：
+
+```text
+deploy/coturn/.env.local
+deploy/coturn/turnserver.local.conf
+```
+
+这两个文件包含本地密钥和机器相关配置，已加入 `.gitignore`。
+
+手动部署时可按下面步骤操作。
+
+1. 修改 `deploy/coturn/turnserver.conf`，至少需要替换：
+
+```conf
+static-auth-secret=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
+realm=your-domain.com
+server-name=your-domain.com
+external-ip=公网IP
+```
+
+2. 启动 coturn：
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+3. 启动信令服务器前设置环境变量：
+
+```bash
+export WEBRTC_TURN_HOST=your-domain.com
+export WEBRTC_TURN_REALM=your-domain.com
+export WEBRTC_TURN_SECRET=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
+export WEBRTC_STUN_URL=stun:your-domain.com:3478
+
+./cmake-build-debug/WebRTCClientServer/WebRTCClientServer
+```
+
+`WEBRTC_TURN_SECRET` 必须与 coturn 的 `static-auth-secret` 保持一致。服务器会为每个
+客户端生成短期 TURN 凭证，并下发：
+
+```json
+{
+  "ice_servers": [
+    {"urls": "stun:your-domain.com:3478"},
+    {
+      "urls": [
+        "turn:your-domain.com:3478?transport=udp",
+        "turn:your-domain.com:3478?transport=tcp"
+      ],
+      "username": "过期时间戳:客户端ID",
+      "credential": "HMAC-SHA1凭证"
+    }
+  ]
+}
+```
+
+云服务器安全组需放行：
+
+```text
+3478/udp
+3478/tcp
+49152-49200/udp
 ```
 
 ---

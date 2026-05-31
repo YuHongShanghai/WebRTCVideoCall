@@ -311,5 +311,5 @@ python3 ./FunASRServer/funasr_wss_server.py --certfile "" --keyfile ""
 
 ## SSL 证书
 
-仓库根目录 `ssl_key/` 下已预置自签名证书（有效期 10 年），仅用于本地/局域网开发测试。
+`FunASRServer/ssl_key/` 下已预置自签名证书（有效期 10 年），仅用于本地/局域网开发测试。
 生产环境请替换为受信任 CA 签发的证书。

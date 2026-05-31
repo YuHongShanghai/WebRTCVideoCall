@@ -9,6 +9,7 @@ import numpy as np
 import argparse
 import ssl
 
+from exceptiongroup import catch
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -49,7 +50,7 @@ parser.add_argument("--ncpu", type=int, default=4, help="cpu cores")
 parser.add_argument(
     "--certfile",
     type=str,
-    default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "../ssl_key/server.crt"),
+    default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "ssl_key/server.crt"),
     required=False,
     help="certfile for ssl",
 )
@@ -57,7 +58,7 @@ parser.add_argument(
 parser.add_argument(
     "--keyfile",
     type=str,
-    default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "../ssl_key/server.key"),
+    default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "ssl_key/server.key"),
     required=False,
     help="keyfile for ssl",
 )
@@ -65,46 +66,47 @@ args = parser.parse_args()
 
 
 websocket_users = set()
+user_models = dict()
+user_id = 0
 
-print("model loading")
+ASR_STREAMING_MODEL = "ASR_STREAMING_MODEL"
+VAD_MODEL = "VAD_MODEL"
+PUNC_MODEL = "PUNC_MODEL"
+ASR_MODEL = "ASR_MODEL"
+IN_USE = "IN_USE"
+
 from funasr import AutoModel
 
-# asr
-model_asr = AutoModel(
-    model=args.asr_model,
-    model_revision=args.asr_model_revision,
-    ngpu=args.ngpu,
-    ncpu=args.ncpu,
-    device=args.device,
-    disable_pbar=True,
-    disable_log=True,
-    disable_update=True
-)
-# asr
-model_asr_streaming = AutoModel(
-    model=args.asr_model_online,
-    model_revision=args.asr_model_online_revision,
-    ngpu=args.ngpu,
-    ncpu=args.ncpu,
-    device=args.device,
-    disable_pbar=True,
-    disable_log=True,
-    disable_update=True
-)
-# vad
-model_vad = AutoModel(
-    model=args.vad_model,
-    model_revision=args.vad_model_revision,
-    ngpu=args.ngpu,
-    ncpu=args.ncpu,
-    device=args.device,
-    disable_pbar=True,
-    disable_log=True,
-    # chunk_size=60,
-)
+def loadAsrStremingModel():
+    print("Loading STREAMING ASR model...")
+    return AutoModel(
+        model=args.asr_model_online,
+        model_revision=args.asr_model_online_revision,
+        ngpu=args.ngpu,
+        ncpu=args.ncpu,
+        device=args.device,
+        disable_pbar=True,
+        disable_log=True,
+        disable_update=True
+    )
 
-if args.punc_model != "":
-    model_punc = AutoModel(
+def loadVadModel():
+    print("Loading VAD model...")
+    return AutoModel(
+        model=args.vad_model,
+        model_revision=args.vad_model_revision,
+        ngpu=args.ngpu,
+        ncpu=args.ncpu,
+        device=args.device,
+        disable_pbar=True,
+        disable_log=True,
+        # chunk_size=60,
+        disable_update=True
+    )
+
+def loadPuncModel():
+    print("Loading PUNC model...")
+    return AutoModel(
         model=args.punc_model,
         model_revision=args.punc_model_revision,
         ngpu=args.ngpu,
@@ -113,16 +115,38 @@ if args.punc_model != "":
         disable_pbar=True,
         disable_log=True,
     )
-else:
-    model_punc = None
+
+def loadAsrModel():
+    print("Loading ASR model...")
+    return AutoModel(
+        model=args.asr_model,
+        model_revision=args.asr_model_revision,
+        ngpu=args.ngpu,
+        ncpu=args.ncpu,
+        device=args.device,
+        disable_pbar=True,
+        disable_log=True,
+        disable_update=True
+    )
 
 
-print("model loaded! only support one client at the same time now!!!!")
+def loadModels():
+    global user_models
+    global user_id
+    user_models[user_id] = {}
+    user_models[user_id][ASR_STREAMING_MODEL] = loadAsrStremingModel()
+    user_models[user_id][ASR_MODEL] = loadAsrModel()
+    user_models[user_id][VAD_MODEL] = loadVadModel()
+    user_models[user_id][PUNC_MODEL] = loadPuncModel()
+    user_models[user_id][IN_USE] = False
+    user_id += 1
 
+loadModels()
+loadModels()
+
+print("model loaded! only support two clients at the same time now!!!!")
 
 async def ws_reset(websocket):
-    print("ws reset now, total num is ", len(websocket_users))
-
     websocket.status_dict_asr_online["cache"] = {}
     websocket.status_dict_asr_online["is_final"] = True
     websocket.status_dict_vad["cache"] = {}
@@ -155,7 +179,19 @@ async def ws_serve(websocket, path):
     speech_end_i = -1
     websocket.wav_name = "microphone"
     websocket.mode = "2pass"
-    print("new user connected", flush=True)
+    print("new user connected, totol ", len(websocket_users), flush=True)
+
+    gotModel = False
+    for uid, models in user_models.items():
+        if (not models[IN_USE]):
+            websocket.uid = uid
+            user_models[uid][IN_USE] = True
+            gotModel = True
+            break
+    if not gotModel:
+        print("cannot assign model for ", websocket)
+        await websocket.disconnect()
+        return
 
     try:
         async for message in websocket:
@@ -230,7 +266,8 @@ async def ws_serve(websocket, path):
                         audio_in = b"".join(frames_asr)
                         try:
                             await async_asr(websocket, audio_in)
-                        except:
+                        except catch(Exception) as e:
+                            print(f"error in asr offline: {e}")
                             print("error in asr offline")
                     frames_asr = []
                     speech_start = False
@@ -247,6 +284,7 @@ async def ws_serve(websocket, path):
         print("ConnectionClosed...", websocket_users, flush=True)
         await ws_reset(websocket)
         websocket_users.remove(websocket)
+        user_models[websocket.uid][IN_USE] = False
     except websockets.InvalidState:
         print("InvalidState...")
     except Exception as e:
@@ -255,7 +293,7 @@ async def ws_serve(websocket, path):
 
 async def async_vad(websocket, audio_in):
 
-    segments_result = model_vad.generate(input=audio_in, **websocket.status_dict_vad)[0]["value"]
+    segments_result = user_models[websocket.uid][VAD_MODEL].generate(input=audio_in, **websocket.status_dict_vad)[0]["value"]
     # print(segments_result)
 
     speech_start = -1
@@ -273,11 +311,11 @@ async def async_vad(websocket, audio_in):
 async def async_asr(websocket, audio_in):
     if len(audio_in) > 0:
         # print(len(audio_in))
-        rec_result = model_asr.generate(input=audio_in, **websocket.status_dict_asr)[0]
+        rec_result = user_models[websocket.uid][ASR_MODEL].generate(input=audio_in, **websocket.status_dict_asr)[0]
         # print("offline_asr, ", rec_result)
-        if model_punc is not None and len(rec_result["text"]) > 0:
+        if len(rec_result["text"]) > 0:
             # print("offline, before punc", rec_result, "cache", websocket.status_dict_punc)
-            rec_result = model_punc.generate(
+            rec_result = user_models[websocket.uid][PUNC_MODEL].generate(
                 input=rec_result["text"], **websocket.status_dict_punc
             )[0]
             # print("offline, after punc", rec_result)
@@ -309,7 +347,7 @@ async def async_asr(websocket, audio_in):
 async def async_asr_online(websocket, audio_in):
     if len(audio_in) > 0:
         # print(websocket.status_dict_asr_online.get("is_final", False))
-        rec_result = model_asr_streaming.generate(
+        rec_result = user_models[websocket.uid][ASR_STREAMING_MODEL].generate(
             input=audio_in, **websocket.status_dict_asr_online
         )[0]
         # print("online, ", rec_result)
